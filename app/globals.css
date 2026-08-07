@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+/* AI Fashion Studio — tema editorial terang bernuansa olive & gold pucat,
+   sesuai warna brand yang diminta: krim FFFAF0 (background), olive 697E3E
+   (aksen utama/tombol), gold pucat F6DD8B (aksen sekunder/highlight).
+   Nama variabel CSS dipertahankan (ink/gold/dst) dari tema gelap sebelumnya
+   supaya semua komponen yang sudah pakai class bg-ink/text-gold/dst tidak
+   perlu diubah satu-satu — cukup ganti NILAI-nya di sini. */
+:root {
+  --color-ink: #fffaf0; /* krim — background halaman */
+  --color-ink-2: #fffdf6; /* krim lebih terang — sidebar/topbar */
+  --color-surface: #ffffff; /* putih — kartu */
+  --color-surface-2: #f6f1e0; /* krim gelap dikit — input/field */
+  --color-border: #ece2c6;
+  --color-border-strong: #d9c98f;
+
+  --color-gold: #697e3e; /* olive — aksen utama (tombol, nav aktif, link) */
+  --color-gold-soft: #8aa056; /* olive lebih terang — hover */
+  --color-gold-dark: #52632f; /* olive lebih gelap — pressed/teks di atas gold */
+
+  --color-text: #2e3620; /* charcoal-olive — teks utama, kontras tinggi di krim */
+  --color-text-muted: #6c6a4e;
+  --color-text-faint: #9a9678;
+
+  --color-success: #3f7a4e;
+  --color-success-soft: #3f7a4e1a;
+  --color-danger: #b3503b;
+  --color-danger-soft: #b3503b1a;
+
+  --color-background: var(--color-ink);
+  --color-foreground: var(--color-text);
+
+  /* aksen gold pucat (F6DD8B) dipakai khusus untuk glow dekoratif & badge highlight */
+  --color-champagne: #f6dd8b;
+}
+
+@theme inline {
+  --color-ink: var(--color-ink);
+  --color-ink-2: var(--color-ink-2);
+  --color-surface: var(--color-surface);
+  --color-surface-2: var(--color-surface-2);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+
+  --color-gold: var(--color-gold);
+  --color-gold-soft: var(--color-gold-soft);
+  --color-gold-dark: var(--color-gold-dark);
+  --color-champagne: var(--color-champagne);
+
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-faint: var(--color-text-faint);
+
+  --color-success: var(--color-success);
+  --color-success-soft: var(--color-success-soft);
+  --color-danger: var(--color-danger);
+  --color-danger-soft: var(--color-danger-soft);
+
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-foreground);
+
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-background);
+  background-image:
+    radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(246, 221, 139, 0.35), transparent),
+    radial-gradient(ellipse 800px 500px at 100% 0%, rgba(105, 126, 62, 0.08), transparent);
+  background-attachment: fixed;
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: rgba(246, 221, 139, 0.55);
+  color: var(--color-text);
+}
+
+/* Scrollbar — tipis, olive redup */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--color-ink);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold-dark);
+}
+
+/* Autofill browser jangan matahin tema terang */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text);
+  -webkit-box-shadow: 0 0 0px 1000px var(--color-surface-2) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
