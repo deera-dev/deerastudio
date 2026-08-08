@@ -1,8 +1,8 @@
-# AI Fashion Studio
+# Deera Studio
 
 Aplikasi internal Deera untuk generate foto katalog gamis pakai AI
 (FLUX Virtual Try-On + FLUX Kontext Pro/Nano Banana), pengganti proses foto
-studio vendor. Dokumen lengkap: [`docs/PRD-AI-Fashion-Studio.md`](./docs/PRD-AI-Fashion-Studio.md).
+studio vendor. Dulu bernama "AI Fashion Studio". Dokumen lengkap: [`docs/PRD-AI-Fashion-Studio.md`](./docs/PRD-AI-Fashion-Studio.md).
 
 ## Tech stack
 
@@ -113,7 +113,7 @@ Di panel "Poster AI" (bagian dari step 1 Content Studio), admin bisa minta AI
 menyarankan HEADLINE pendek bergaya majalah fashion (2-3 baris besar, boleh 1
 baris aksen font tulisan tangan) + subtitle + kalimat caption bar bawah, lalu
 me-render itu LANGSUNG DI ATAS foto produk jadi 1 poster PNG siap posting —
-badge logo Deera kecil di atas, headline besar, kode produk, dan swatch warna
+logo Deera kecil di kiri atas, headline besar, kode produk, dan swatch warna
 opsional. Defaultnya MINIMAL (foto + headline + subtitle saja, kode produk &
 swatch warna OFF by default) supaya hasilnya terasa editorial/lifestyle,
 bukan flyer katalog — admin tinggal nyalain toggle-nya kalau post itu memang
@@ -131,16 +131,18 @@ perlu info lengkap. Hasil render bisa dipakai langsung sebagai foto post
   `lib/image-template/poster.tsx`, hasil PNG di-upload ke Supabase Storage
   (bucket `ai-fashion-studio`, folder `content-posters/`) lewat
   `uploadBufferToStorage()`.
-- **Badge logo**: `lib/image-template/assets/logo-mark.png` adalah pennant
-  hijau bentuk scalloped (bukan kotak) berisi icon+wordmark "DEERA" asli
-  brand (dikirim admin, di-crop apa adanya dari file logo resmi, tanpa
-  tagline "Graceful Elegance") — shape+shadow di-bake langsung ke file PNG
-  (bukan CSS clip-path) karena Satori/ImageResponse tidak reliable untuk
-  custom shape. Kalau logo resmi berubah, generate ulang asetnya (leaf+deer
-  icon perlu di-"fill" dulu pakai `scipy.ndimage.binary_closing` +
-  `binary_fill_holes` sebelum di-recolor putih, karena bentuk deer di file
-  asli adalah lubang transparan yang nyambung ke luar shape, bukan area
-  solid — lihat riwayat chat kalau perlu re-generate).
+- **Logo**: `lib/image-template/assets/logo-mark.png` = file `deera-white.png`
+  asli dari admin, di-crop APA ADANYA — tanpa badge/card/shape apa pun di
+  belakangnya, tanpa recolor. Ditaruh kiri atas (bukan tengah/bawah — sudah
+  dicoba beberapa versi bentuk badge custom, admin akhirnya minta logo polos
+  saja biar dijamin 100% sama persis dengan file asli, lihat riwayat chat).
+  Bagian siluet rusa di file aslinya itu LUBANG transparan (bukan solid) —
+  sengaja dibiarkan apa adanya sehingga foto di baliknya "mengintip" lewat
+  siluet itu (efek jendela), bukan bug. Kalau logo resmi berubah, tinggal
+  timpa file ini dengan crop baru dari file yang dikirim admin — TIDAK perlu
+  proses recolor/fill-hole apa pun lagi (pattern lama yang butuh
+  `scipy.ndimage.binary_closing`/`binary_fill_holes` sudah tidak dipakai
+  sejak versi ini).
 - **Font**: 3 font asli brand (dikirim admin) berlisensi Demo/Trial atau
   Personal-Use-Only, belum bisa dipakai komersial — sementara diganti font
   gratis bergaya serupa (Fraunces = headline serif, Alex Brush = aksen

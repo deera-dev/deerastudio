@@ -61,7 +61,8 @@ export interface GenerateCaptionResult {
 const SYSTEM_PROMPT = [
   "Kamu adalah social media specialist top-tier untuk Deera Indonesia, brand fashion muslim (gamis & mukena) asal Indonesia.",
   "Gaya bahasa: Bahasa Indonesia, hangat, elegan, sedikit puitis tapi tetap mudah dibaca — sopan dan sesuai nilai brand modest fashion. Hindari bahasa yang terlalu formal/kaku atau terlalu gaul/alay.",
-  "Tulis caption Instagram yang siap posting: hook pembuka yang menarik perhatian di 1-2 baris pertama, isi yang mengalir natural (boleh pakai emoji secukupnya, jangan berlebihan), lalu closing dengan call-to-action yang jelas (DM/chat WhatsApp untuk order/tanya).",
+  "PENDEKATAN (PENTING): tulis caption bergaya STORYTELLING/naratif, BUKAN copy jualan yang berbunyi seperti brosur. Buka dengan sepenggal momen, suasana, atau perasaan yang relatable (mis. pagi yang tenang sebelum acara keluarga, rasa percaya diri saat melangkah keluar rumah, ketenangan saat mengenakan sesuatu yang nyaman) — biarkan produk hadir SEBAGAI BAGIAN dari cerita itu, bukan jadi subjek utama yang dijual keras. Hindari kalimat generik ala iklan seperti 'cocok untuk kamu yang...', 'yuk buruan order', 'dapatkan sekarang juga', atau daftar fitur produk yang terasa seperti spesifikasi. Boleh pakai emoji secukupnya, jangan berlebihan.",
+  "Closing tetap boleh mengarahkan audiens untuk DM/chat WhatsApp kalau tertarik, tapi sampaikan dengan lembut dan menyatu dengan nada cerita — bukan CTA keras/mendesak bergaya sales.",
   "ATURAN ANTI-HALUSINASI (WAJIB DIPATUHI): HANYA gunakan fakta produk yang diberikan di bawah (nama, bahan, warna, harga, ukuran) dan catatan tambahan dari admin. JANGAN PERNAH mengarang testimoni pelanggan, jumlah stok, tanggal promo, persentase diskon, statistik, atau klaim apa pun yang tidak eksplisit ada di input. Kalau informasi tertentu tidak diberikan, jangan sebutkan sama sekali daripada menebak.",
   "Caption harus PANJANG WAJAR untuk Instagram (sekitar 3-6 kalimat / 40-90 kata), bukan esai panjang.",
 ].join("\n");
@@ -162,7 +163,8 @@ export interface SuggestHeadlineResult {
 const HEADLINE_SYSTEM_PROMPT = [
   "Kamu adalah social media specialist top-tier untuk Deera Indonesia, brand fashion muslim (gamis & mukena) asal Indonesia.",
   "Tugasmu SEKARANG: menyarankan HEADLINE pendek untuk poster/gambar Instagram yang dirender di atas foto produk — gaya majalah fashion premium, singkat, puitis, hangat, elegan. Ini BUKAN caption panjang.",
-  "Ini adalah copywriting KREATIF bertema/mood, boleh berupa ajakan emosional umum (contoh gaya: \"Untuk Momen Berkumpul yang Hangat\", \"Anggun di Setiap Langkah\") — TAPI tetap jangan membuat klaim faktual spesifik (bahan/harga/diskon/stok) yang tidak ada di data produk.",
+  "Ini adalah copywriting KREATIF bertema/mood, bukan copy jualan. Tulis seolah judul editorial majalah fashion — evokasi CERITA, momen, atau perasaan, BUKAN kalimat promosi. Contoh nada yang BENAR: \"Untuk Momen Berkumpul yang Hangat\", \"Anggun di Setiap Langkah\", \"Kelembutan yang Berbicara Sendiri\". Contoh nada yang SALAH/terlalu jualan (hindari): \"Koleksi Terbaru, Buruan Order!\", \"Gamis Nyaman untuk Sehari-hari\", \"Tampil Cantik dengan Deera\" — ini terdengar seperti iklan, bukan cerita.",
+  "TAPI tetap jangan membuat klaim faktual spesifik (bahan/harga/diskon/stok) yang tidak ada di data produk.",
   "Balas HANYA dalam format JSON PERSIS berikut, tanpa teks/markdown lain di luar JSON:",
   '{"headline":[{"text":"...","script":false},{"text":"...","script":false}],"subtitle":"...","bottomCaption":"...","sceneIdea":"..."}',
   "Aturan \"headline\": array 1-3 objek. Maksimal 2 baris dengan \"script\":false (font serif besar) — tiap baris ringkas, idealnya 2-5 kata. Boleh tambahkan SATU baris opsional dengan \"script\":true berisi 1-3 kata aksen bergaya tulisan tangan elegan (mis. nama koleksi/kata puitis pendek) — kalau tidak pas, jangan dipaksakan, cukup 2 baris script:false saja.",
@@ -246,4 +248,117 @@ export async function suggestHeadline(input: SuggestHeadlineInput): Promise<Sugg
   });
 
   return parseHeadlineOutput(result.output);
+}
+
+// --- Storyboard carousel ("Generate Alur Cerita") ---
+// Beda dari suggestHeadline() di atas (yang cuma menyarankan SATU sceneIdea
+// buat background poster/slide pertama): ini menyarankan BEBERAPA scene
+// SEKALIGUS yang saling terhubung sebagai satu alur cerita — dipakai admin
+// utk mengisi arahan tiap slide carousel foto marketing (lihat panel "Foto
+// Marketing AI" per-slide di app/content/page.tsx). Tujuannya: hindari tiap
+// slide terasa acak/redundan (masalah nyata yang dilaporkan admin — 3 foto
+// hasil generate independen terasa "cerita yang sama", bukan progresif),
+// dengan cara satu pemanggilan LLM yang sadar akan JUMLAH slide sekaligus,
+// diminta merancang alur (awal→tengah→akhir atau semacamnya) dalam SATU
+// setting/mood/hari yang sama, tiap beat scene/aktivitas/framing yang
+// beda-beda secara visual.
+
+export interface SuggestStoryboardInput {
+  product: CaptionProductContext;
+  theme: ContentTheme;
+  extraNotes?: string;
+  sceneCount: number; // jumlah slide/foto yang dipilih admin (2-10)
+}
+
+export interface StoryboardScene {
+  label: string; // label singkat beat cerita, mis. "Bersiap di depan cermin"
+  sceneIdea: string; // Bahasa Inggris, dipakai lib/prompts/marketing-photo.ts
+}
+
+export interface SuggestStoryboardResult {
+  scenes: StoryboardScene[];
+}
+
+const STORYBOARD_SYSTEM_PROMPT = [
+  "Kamu adalah social media specialist & creative director top-tier untuk Deera Indonesia, brand fashion muslim (gamis & mukena) asal Indonesia, yang sedang merancang STORYBOARD untuk satu post carousel Instagram.",
+  "Tugasmu: rancang SATU alur cerita/momen yang utuh, terbagi jadi beberapa 'scene' berurutan — SATU scene untuk SATU foto/slide di carousel. Ini BUKAN beberapa ide acak yang kebetulan pakai produk yang sama — semua scene harus terasa seperti bagian dari SATU cerita/hari/momen yang sama (setting, mood, waktu, dan nuansa emosional yang konsisten), supaya kalau audiens geser slide demi slide, mereka merasa mengikuti sebuah cerita yang mengalir dan brand-nya makin nempel di ingatan — bukan cuma lihat 3-10 foto produk yang mirip-mirip dari sudut berbeda.",
+  "SETIAP scene HARUS beda secara visual dari scene lain (aktivitas/gestur/framing/sudut/bagian dari setting yang ditonjolkan berbeda) supaya tidak terasa redundan, TAPI tetap konsisten satu dunia/cerita yang sama (lokasi/rangkaian ruang yang sama atau berdekatan, waktu hari yang masuk akal, mood emosional yang sama). Pikirkan seperti storyboard film pendek 15 detik: shot 1 beda dari shot 2 beda dari shot 3, tapi semuanya jelas dari cerita yang sama.",
+  "Urutan yang disarankan (boleh disesuaikan tema): scene pembuka (mis. bersiap/momen tenang di awal), 1+ scene tengah (aktivitas/transisi/interaksi dengan sekitar), scene penutup (mis. momen puncak/rehat/refleksi). Untuk tema 'Tips & Styling' atau 'Promo/CTA' boleh disesuaikan supaya tetap relevan temanya, tapi progresi/kontinuitas cerita tetap wajib ada.",
+  "Balas HANYA dalam format JSON PERSIS berikut, tanpa teks/markdown lain di luar JSON:",
+  '{"scenes":[{"label":"...","sceneIdea":"..."}, ...]}',
+  "Jumlah item di 'scenes' HARUS PERSIS sama dengan jumlah yang diminta di data di bawah (sceneCount).",
+  "'label': label pendek Bahasa Indonesia (maks ~6 kata) buat admin, mis. 'Bersiap di depan cermin'.",
+  "'sceneIdea': SATU arahan CERITA/MOMEN dalam BAHASA INGGRIS sederhana (dipakai AI image-generator lain utk merestyle sebuah foto produk yang SUDAH ADA jadi lebih editorial/lifestyle, model & baju tetap 100% sama, cuma suasana/pose yang menyesuaikan cerita). JANGAN cuma deskripsi ruangan/tekstur kosong — bayangkan momen naratif nyata yang sedang terjadi, sertakan implied activity/ambient life di sekitarnya. Tiap sceneIdea harus jelas beda dari sceneIdea lain di array ini (aktivitas/framing/fokus berbeda), tapi tetap konsisten dari segi lokasi/waktu/mood dengan scene lain supaya berasa satu cerita yang sama.",
+  "ATURAN ANTI-HALUSINASI (WAJIB): JANGAN mengarang bahan/harga/diskon/testimoni/statistik/jumlah stok yang tidak ada di data produk di bawah. Bahasa mood/emosional umum yang tidak mengklaim fakta spesifik itu boleh.",
+].join("\n");
+
+function buildStoryboardUserPrompt(input: SuggestStoryboardInput): string {
+  const { product, theme, extraNotes, sceneCount } = input;
+  return [
+    "DATA PRODUK (fakta, jangan tambah-tambahi):",
+    `- Kode: ${product.kode}`,
+    `- Nama: ${product.nama}`,
+    product.bahan ? `- Bahan: ${product.bahan}` : null,
+    product.warna?.length ? `- Warna tersedia: ${product.warna.join(", ")}` : null,
+    "",
+    `TEMA POSTINGAN: ${THEME_LABELS[theme]}`,
+    THEME_GUIDANCE[theme],
+    extraNotes?.trim() ? `\nCATATAN TAMBAHAN DARI ADMIN (boleh dipakai sbg fakta):\n${extraNotes.trim()}` : "",
+    "",
+    `JUMLAH SLIDE/SCENE YANG DIBUTUHKAN (sceneCount): ${sceneCount}`,
+    "Rancang storyboard sesuai format JSON yang diminta di system prompt — persis sceneCount item, satu alur cerita yang utuh.",
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
+function parseStoryboardOutput(raw: string, sceneCount: number): SuggestStoryboardResult {
+  const cleaned = raw
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("Gagal membaca storyboard dari AI (format tidak dikenali)");
+    parsed = JSON.parse(match[0]);
+  }
+
+  const obj = parsed as { scenes?: unknown };
+  const scenes: StoryboardScene[] = Array.isArray(obj.scenes)
+    ? obj.scenes
+        .filter(
+          (s): s is { label: string; sceneIdea: string } =>
+            !!s &&
+            typeof s === "object" &&
+            typeof (s as { sceneIdea?: unknown }).sceneIdea === "string" &&
+            (s as { sceneIdea: string }).sceneIdea.trim() !== ""
+        )
+        .slice(0, sceneCount)
+        .map((s) => ({
+          label: typeof s.label === "string" && s.label.trim() ? s.label.trim() : "Scene",
+          sceneIdea: s.sceneIdea.trim(),
+        }))
+    : [];
+
+  if (scenes.length === 0) {
+    throw new Error("AI tidak menghasilkan storyboard yang valid, coba generate ulang");
+  }
+
+  return { scenes };
+}
+
+export async function suggestStoryboard(input: SuggestStoryboardInput): Promise<SuggestStoryboardResult> {
+  const result = await generateText({
+    prompt: buildStoryboardUserPrompt(input),
+    systemPrompt: STORYBOARD_SYSTEM_PROMPT,
+    temperature: 1,
+    maxTokens: 900,
+  });
+
+  return parseStoryboardOutput(result.output, input.sceneCount);
 }

@@ -125,6 +125,11 @@ export type ContentPostStatus = "draft" | "scheduled" | "published" | "failed";
 export interface ContentPost {
   id: string;
   product_kode: string;
+  // Produk tambahan yang tampil di post ini (fitur "Foto Gabungan Produk AI"
+  // — 2 model beda produk dalam 1 frame yang sama). product_kode tetap SATU
+  // (produk utama/pertama dipilih), ini cuma daftar tambahan buat konteks
+  // caption + tampilan. Kosong ([]) utk post normal 1 produk.
+  secondary_product_kodes: string[];
   image_urls: string[];
   content_type: ContentPostType;
   theme: ContentPostTheme | null;

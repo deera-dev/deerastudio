@@ -82,9 +82,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
   const width = input.width ?? DEFAULT_WIDTH;
   const height = input.height ?? DEFAULT_HEIGHT;
   const headline = input.headline.filter((l) => l.text.trim()).slice(0, 3);
-  // +130 supaya headline block tidak ketiban badge bottom-center
-  // (badge tinggi ~104px + margin bottom 22px, lihat render badge di bawah)
-  const bottomOffset = (input.bottomCaption ? 210 : 96) + 130;
+  const bottomOffset = input.bottomCaption ? 210 : 96;
 
   const jsx = (
     <div
@@ -106,18 +104,34 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
         style={{ position: "absolute", top: 0, left: 0, width, height, objectFit: "cover" }}
       />
 
-      {/* gradasi gelap agar teks tetap terbaca di atas foto apa pun */}
+      {/* gradasi gelap agar teks tetap terbaca di atas foto apa pun — mulai
+          menggelap lebih awal (sekitar area headline) dan lebih pekat di
+          bawah, supaya kontras tidak bergantung pada isi foto */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           display: "flex",
           background:
-            "linear-gradient(to bottom, rgba(10,8,5,0.12) 0%, rgba(10,8,5,0) 26%, rgba(10,8,5,0.18) 48%, rgba(10,8,5,0.74) 82%, rgba(10,8,5,0.88) 100%)",
+            "linear-gradient(to bottom, rgba(10,8,5,0.10) 0%, rgba(10,8,5,0) 22%, rgba(10,8,5,0.30) 40%, rgba(10,8,5,0.58) 56%, rgba(10,8,5,0.80) 74%, rgba(10,8,5,0.92) 100%)",
         }}
       />
 
-      {/* headline block */}
+      {/* logo Deera — kiri atas, file asli deera-white.png apa adanya (tanpa
+          badge/card/shape di belakangnya, tanpa recolor) sesuai arahan
+          admin. Bagian "lubang" rusa di file aslinya transparan — sengaja
+          dibiarkan menampilkan foto di baliknya (efek "jendela"), bukan bug.
+          Kalau nanti perlu diganti, tinggal timpa
+          lib/image-template/assets/logo-mark.png dengan crop baru, tidak
+          perlu proses recolor/fill-hole apa pun. */}
+      <div style={{ position: "absolute", top: 40, left: 48, display: "flex" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logoDataUri} alt="" width={130} height={183} style={{ display: "flex" }} />
+      </div>
+
+      {/* headline block — dibungkus panel semi-transparan (bukan cuma
+          gradasi global) supaya tetap kebaca walau area foto di baliknya
+          terang/ramai */}
       <div
         style={{
           position: "absolute",
@@ -128,6 +142,17 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
           flexDirection: "column",
         }}
       >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignSelf: "flex-start",
+            maxWidth: "100%",
+            background: "rgba(8,6,4,0.46)",
+            borderRadius: 18,
+            padding: "26px 30px",
+          }}
+        >
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {headline.map((line, i) => (
             <span
@@ -138,8 +163,9 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
                 fontWeight: line.script ? 400 : 700,
                 fontSize: line.script ? 104 : 60,
                 lineHeight: line.script ? 1 : 1.1,
-                color: "#FFFDF8",
-                textShadow: "0 4px 24px rgba(0,0,0,0.4)",
+                color: line.script ? "#C7AF6F" : "#FFFFFF",
+                textShadow:
+                  "0 1px 2px rgba(0,0,0,0.55), 0 8px 28px rgba(0,0,0,0.5)",
               }}
             >
               {line.text}
@@ -155,7 +181,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
               fontWeight: 600,
               fontSize: 23,
               letterSpacing: 2,
-              color: "#E7D9B8",
+              color: "#C7AF6F",
               marginTop: 16,
             }}
           >
@@ -170,7 +196,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
               fontFamily: "Poppins",
               fontWeight: 400,
               fontSize: 19,
-              color: "rgba(255,253,248,0.72)",
+              color: "rgba(255,255,255,0.78)",
               marginTop: 10,
             }}
           >
@@ -187,7 +213,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
                 fontWeight: 600,
                 fontSize: 14,
                 letterSpacing: 3,
-                color: "rgba(255,253,248,0.62)",
+                color: "rgba(199,175,111,0.85)",
               }}
             >
               COLOUR AVAILABLE
@@ -202,13 +228,14 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
                     height: 26,
                     borderRadius: 999,
                     background: warnaToHex(c.warna),
-                    border: "2px solid rgba(255,253,248,0.9)",
+                    border: "2px solid rgba(255,255,255,0.9)",
                   }}
                 />
               ))}
             </div>
           </div>
         ) : null}
+        </div>
       </div>
 
       {/* caption bar bawah (opsional) */}
@@ -220,7 +247,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
             right: 0,
             bottom: 0,
             display: "flex",
-            padding: "28px 64px 150px", // extra bottom padding: hindari tabrakan sama badge bottom-center
+            padding: "28px 64px 36px",
             background: "linear-gradient(to top, rgba(8,6,4,0.94), rgba(8,6,4,0))",
           }}
         >
@@ -231,7 +258,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
               fontWeight: 400,
               fontSize: 19,
               lineHeight: 1.45,
-              color: "rgba(255,253,248,0.92)",
+              color: "rgba(255,255,255,0.92)",
             }}
           >
             {input.bottomCaption}
@@ -239,30 +266,6 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
         </div>
       ) : null}
 
-      {/* badge logo — bottom-center (per arahan admin), pennant hijau bentuk
-          scalloped-fan (bukan kotak), logo asli Deera (icon + wordmark
-          "DEERA" + tagline "Graceful Elegance") di-crop apa adanya (bukan
-          approksimasi font), warna brand hijau asli (#1A472A). Shape+shadow
-          di-bake langsung ke file PNG-nya
-          (lib/image-template/assets/logo-mark.png) karena Satori/
-          ImageResponse tidak reliable untuk clip-path custom — kalau perlu
-          re-generate asetnya, lihat riwayat chat (proses crop+fill icon
-          pakai scipy morphology, lihat README §Poster AI). Dirender PALING
-          TERAKHIR (di atas headline/caption bar) supaya selalu terlihat
-          jelas di posisi paling bawah. */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 22,
-          left: 0,
-          right: 0,
-          display: "flex",
-          justifyContent: "center",
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logoDataUri} alt="" width={168} height={104} style={{ display: "flex" }} />
-      </div>
     </div>
   );
 

@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 import {
   Camera,
   History,
@@ -31,15 +32,15 @@ const NAV = [
 
 function Logo() {
   return (
-    <Link href="/dashboard" className="flex items-center gap-2 px-6 py-6">
-      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-gold/50 text-gold">
-        <Wand2 className="h-4 w-4" />
-      </span>
-      <span className="font-display text-base font-semibold leading-tight text-text">
-        AI Fashion
-        <br />
-        <span className="text-gold">Studio</span>
-      </span>
+    <Link href="/dashboard" className="flex items-center px-6 py-6">
+      <Image
+        src="/deera-logo.png"
+        alt="Deera Studio"
+        width={96}
+        height={96}
+        className="h-12 w-12 rounded-lg"
+        priority
+      />
     </Link>
   );
 }

@@ -121,8 +121,98 @@ export default function ContentStudioPage() {
   // --- Foto Marketing AI (restyle scene/background dari foto produk yang
   // sudah ada — model & produk 100% sama, cuma suasana yang berubah) ---
   const [sceneIdea, setSceneIdea] = useState("");
-  const [marketingPhotoUrl, setMarketingPhotoUrl] = useState<string | null>(null);
-  const [generatingMarketingPhoto, setGeneratingMarketingPhoto] = useState(false);
+  // Foto Marketing AI (v2): dulu cuma 1 hasil generate global (marketingPhotoUrl)
+  // yang otomatis jadi background poster doang — slide carousel lain tetap foto
+  // katalog asli, bukan hasil AI. Sekarang tiap foto yang dipilih (selectedPhotoUrls)
+  // bisa di-generate ulang scene-nya SENDIRI-SENDIRI (arahan beda per foto = tiap
+  // slide jadi momen cerita yang berbeda), key-nya URL foto ASLI supaya regenerate
+  // berikutnya tetap mulai dari foto katalog asli (bukan hasil AI sebelumnya).
+  const [marketingOverrides, setMarketingOverrides] = useState<
+    Record<string, { sceneIdea: string; url: string | null; generating: boolean; label?: string }>
+  >({});
+
+  function effectivePhotoUrl(url: string): string {
+    return marketingOverrides[url]?.url || url;
+  }
+  const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
+
+  // --- Foto Gabungan Produk AI (opsional) — 2 model beda produk 1 frame ---
+  const [secondProductQuery, setSecondProductQuery] = useState("");
+  const [secondProductResults, setSecondProductResults] = useState<ProductRow[]>([]);
+  const [loadingSecondProducts, setLoadingSecondProducts] = useState(false);
+  const [secondProduct, setSecondProduct] = useState<ProductRow | null>(null);
+  const [secondProductPhotoUrl, setSecondProductPhotoUrl] = useState<string | null>(null);
+  const [comboSceneIdea, setComboSceneIdea] = useState("");
+  const [comboPhotoUrl, setComboPhotoUrl] = useState<string | null>(null);
+  const [generatingCombo, setGeneratingCombo] = useState(false);
+  // kepilih begitu comboPhotoUrl "ditambahkan ke Foto" — dipakai saat simpan
+  // draft (secondaryProductKodes) & saat generate caption (dikasih tau AI).
+  const [comboSecondaryProduct, setComboSecondaryProduct] = useState<ProductRow | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function search() {
+      if (!secondProductQuery.trim()) {
+        setSecondProductResults([]);
+        return;
+      }
+      setLoadingSecondProducts(true);
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("products")
+        .select("kode, nama, bahan, image, detail, warna, warna_images, video")
+        .or(`kode.ilike.%${secondProductQuery}%,nama.ilike.%${secondProductQuery}%`)
+        .order("created_at", { ascending: false })
+        .limit(24);
+      if (!cancelled) {
+        setSecondProductResults(((data as ProductRow[]) ?? []).filter((p) => p.kode !== selectedProduct?.kode));
+        setLoadingSecondProducts(false);
+      }
+    }
+    const t = setTimeout(search, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [secondProductQuery, selectedProduct?.kode]);
+
+  function selectSecondProduct(p: ProductRow) {
+    setSecondProduct(p);
+    setSecondProductPhotoUrl(p.image ?? null);
+    setComboPhotoUrl(null);
+  }
+
+  async function handleGenerateCombo() {
+    const primaryUrl = selectedPhotoUrls[0];
+    if (!primaryUrl || !secondProduct || !secondProductPhotoUrl || !comboSceneIdea.trim()) return;
+    setGeneratingCombo(true);
+    try {
+      const res = await fetch("/api/content/generate-combo-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceImageUrlA: effectivePhotoUrl(primaryUrl),
+          sourceImageUrlB: secondProductPhotoUrl,
+          sceneDescription: comboSceneIdea,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.formErrors?.join(", ") || data?.error || "Generate foto gabungan gagal");
+      setComboPhotoUrl(data.url);
+      toast.success("Foto gabungan siap — cek dulu sebelum dipakai, hasil AI 2-orang kadang perlu diulang.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generate foto gabungan gagal");
+    } finally {
+      setGeneratingCombo(false);
+    }
+  }
+
+  function useComboPhotoAsSlide() {
+    if (!comboPhotoUrl || !secondProduct) return;
+    setSelectedPhotoUrls((prev) => (prev.includes(comboPhotoUrl) ? prev : [...prev, comboPhotoUrl]));
+    setComboSecondaryProduct(secondProduct);
+    toast.success("Foto gabungan ditambahkan sebagai salah satu slide");
+  }
 
   // --- Kalender bulanan ---
   const now = new Date();
@@ -177,8 +267,8 @@ export default function ContentStudioPage() {
         ? await base
             .or(`kode.ilike.%${productQuery}%,nama.ilike.%${productQuery}%`)
             .order("created_at", { ascending: false })
-            .limit(24)
-        : await base.order("created_at", { ascending: false }).limit(24);
+            .limit(150)
+        : await base.order("created_at", { ascending: false }).limit(150);
       if (!cancelled) {
         setProductResults((data as ProductRow[]) ?? []);
         setLoadingProducts(false);
@@ -190,6 +280,15 @@ export default function ContentStudioPage() {
       clearTimeout(t);
     };
   }, [productQuery]);
+
+  // Auto-promosi Format ke Carousel begitu 2+ foto terpilih — pasangan dari
+  // fix di togglePhoto() di atas, supaya admin tidak perlu ingat urutan
+  // "ganti Format dulu baru pilih foto".
+  useEffect(() => {
+    if (selectedPhotoUrls.length > 1 && contentType === "feed_single") {
+      setContentType("carousel");
+    }
+  }, [selectedPhotoUrls.length, contentType]);
 
   function selectProduct(p: ProductRow) {
     setSelectedProduct(p);
@@ -206,7 +305,13 @@ export default function ContentStudioPage() {
     setShowColors(false);
     setShowBottomCaption(false);
     setSceneIdea("");
-    setMarketingPhotoUrl(null);
+    setMarketingOverrides({});
+    setSecondProduct(null);
+    setSecondProductQuery("");
+    setSecondProductPhotoUrl(null);
+    setComboSceneIdea("");
+    setComboPhotoUrl(null);
+    setComboSecondaryProduct(null);
   }
 
   function photoOptions(p: ProductRow): { label: string; url: string }[] {
@@ -219,18 +324,24 @@ export default function ContentStudioPage() {
     return opts;
   }
 
+  // Foto picker SELALU multi-select (tidak lagi tergantung urutan klik vs
+  // ganti Format) — sebelumnya kalau admin klik beberapa foto SEBELUM ganti
+  // Format ke Carousel (state awal "feed_single"), tiap klik cuma REPLACE
+  // pilihan sebelumnya, jadi pas akhirnya ganti ke Carousel cuma kebawa 1
+  // foto. Sekarang klik selalu menambah/menghapus dari daftar (kecuali utk
+  // "reel" yg tetap 1 foto karena reel pakai video, bukan multi-foto), dan
+  // Format otomatis kepromosikan ke Carousel begitu 2+ foto terpilih (lihat
+  // useEffect di bawah) — tidak perlu lagi ganti Format duluan.
   function togglePhoto(url: string) {
-    if (contentType === "carousel") {
-      setSelectedPhotoUrls((prev) =>
-        prev.includes(url)
-          ? prev.filter((u) => u !== url)
-          : prev.length < 10
-            ? [...prev, url]
-            : prev
-      );
-    } else {
+    if (contentType === "reel") {
       setSelectedPhotoUrls([url]);
+      return;
     }
+    setSelectedPhotoUrls((prev) => {
+      if (prev.includes(url)) return prev.filter((u) => u !== url);
+      if (prev.length >= 10) return prev;
+      return [...prev, url];
+    });
   }
 
   async function handleSuggestHeadline() {
@@ -260,7 +371,7 @@ export default function ContentStudioPage() {
       setPosterProductCode(data.productCode ?? selectedProduct.kode);
       setPosterPreviewUrl(null);
       setSceneIdea(data.sceneIdea ?? "");
-      setMarketingPhotoUrl(null);
+      setMarketingOverrides({});
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Saran headline gagal");
     } finally {
@@ -268,27 +379,103 @@ export default function ContentStudioPage() {
     }
   }
 
-  async function handleGenerateMarketingPhoto() {
-    if (!selectedProduct || selectedPhotoUrls.length === 0 || !sceneIdea.trim()) return;
-    setGeneratingMarketingPhoto(true);
+  function slotSceneIdea(url: string): string {
+    return marketingOverrides[url]?.sceneIdea ?? sceneIdea;
+  }
+
+  function updateSlotSceneIdea(url: string, text: string) {
+    setMarketingOverrides((prev) => ({
+      ...prev,
+      [url]: {
+        sceneIdea: text,
+        url: prev[url]?.url ?? null,
+        generating: prev[url]?.generating ?? false,
+        label: prev[url]?.label,
+      },
+    }));
+  }
+
+  function resetMarketingOverride(url: string) {
+    setMarketingOverrides((prev) => {
+      const next = { ...prev };
+      delete next[url];
+      return next;
+    });
+    setPosterPreviewUrl(null);
+  }
+
+  // "Generate Alur Cerita" — beda dari generate per-foto di atas (yang
+  // masing-masing berdiri sendiri): ini SATU pemanggilan AI yang sadar akan
+  // SEMUA slide sekaligus, dirancang supaya tiap slide jadi beat cerita yang
+  // beda tapi tetap 1 alur yang nyambung (bukan 3 foto random yang mirip).
+  // Hasilnya cuma ngisi teks arahan tiap slide (marketingOverrides[...].sceneIdea)
+  // — admin tetap review/edit dulu sebelum klik generate per foto.
+  async function handleSuggestStoryboard() {
+    if (!selectedProduct || selectedPhotoUrls.length < 2) return;
+    setGeneratingStoryboard(true);
+    try {
+      const res = await fetch("/api/content/suggest-storyboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productKode: selectedProduct.kode,
+          theme,
+          extraNotes: extraNotes || undefined,
+          sceneCount: selectedPhotoUrls.length,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.formErrors?.join(", ") || data?.error || "Generate alur cerita gagal");
+      const scenes = data.scenes as { label: string; sceneIdea: string }[];
+      setMarketingOverrides((prev) => {
+        const next = { ...prev };
+        selectedPhotoUrls.forEach((url, i) => {
+          const scene = scenes[i];
+          if (!scene) return;
+          next[url] = {
+            sceneIdea: scene.sceneIdea,
+            url: next[url]?.url ?? null,
+            generating: false,
+            label: scene.label,
+          };
+        });
+        return next;
+      });
+      toast.success("Alur cerita siap — review arahan tiap foto lalu generate satu-satu");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generate alur cerita gagal");
+    } finally {
+      setGeneratingStoryboard(false);
+    }
+  }
+
+  async function handleGenerateMarketingPhoto(sourceUrl: string) {
+    const scene = slotSceneIdea(sourceUrl);
+    if (!selectedProduct || !scene.trim()) return;
+    setMarketingOverrides((prev) => ({
+      ...prev,
+      [sourceUrl]: { sceneIdea: scene, url: prev[sourceUrl]?.url ?? null, generating: true },
+    }));
     try {
       const res = await fetch("/api/content/generate-marketing-photo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceImageUrl: selectedPhotoUrls[0],
-          sceneDescription: sceneIdea,
+          sourceImageUrl: sourceUrl,
+          sceneDescription: scene,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.formErrors?.join(", ") || data?.error || "Generate foto marketing gagal");
-      setMarketingPhotoUrl(data.url);
+      setMarketingOverrides((prev) => ({ ...prev, [sourceUrl]: { sceneIdea: scene, url: data.url, generating: false } }));
       setPosterPreviewUrl(null);
-      toast.success("Foto marketing baru siap dipakai di poster");
+      toast.success("Foto marketing baru siap dipakai");
     } catch (err) {
+      setMarketingOverrides((prev) => ({
+        ...prev,
+        [sourceUrl]: { sceneIdea: scene, url: prev[sourceUrl]?.url ?? null, generating: false },
+      }));
       toast.error(err instanceof Error ? err.message : "Generate foto marketing gagal");
-    } finally {
-      setGeneratingMarketingPhoto(false);
     }
   }
 
@@ -319,7 +506,7 @@ export default function ContentStudioPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          photoUrl: marketingPhotoUrl || selectedPhotoUrls[0],
+          photoUrl: effectivePhotoUrl(selectedPhotoUrls[0]),
           headline,
           subtitle: posterSubtitle || undefined,
           productCode: posterProductCode || selectedProduct.kode,
@@ -350,6 +537,14 @@ export default function ContentStudioPage() {
     if (!selectedProduct) return;
     setGenerating(true);
     try {
+      // Kalau ada foto gabungan 2 produk yang sudah dipakai (comboSecondaryProduct),
+      // kasih tau AI caption lewat extraNotes yang DIKIRIM (bukan textarea admin
+      // yang keliatan) — supaya caption bisa nyebut produk kedua secara natural
+      // tanpa perlu ubah struktur prompt generateCaption() di server.
+      const comboNote = comboSecondaryProduct
+        ? `Salah satu foto di post ini menampilkan produk kedua tampil bersama: ${comboSecondaryProduct.nama} (kode ${comboSecondaryProduct.kode}). Boleh disebut caption secara natural (mis. "dipadukan bersama" / "tampil berdampingan"), tanpa mengarang detail lain soal produk kedua ini.`
+        : "";
+      const combinedExtraNotes = [extraNotes.trim(), comboNote].filter(Boolean).join("\n\n");
       const res = await fetch("/api/content/generate-caption", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -357,7 +552,7 @@ export default function ContentStudioPage() {
           productKode: selectedProduct.kode,
           theme,
           contentType,
-          extraNotes: extraNotes || undefined,
+          extraNotes: combinedExtraNotes || undefined,
         }),
       });
       const data = await res.json();
@@ -380,12 +575,13 @@ export default function ContentStudioPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productKode: selectedProduct.kode,
-          imageUrls: selectedPhotoUrls,
+          imageUrls: selectedPhotoUrls.map(effectivePhotoUrl),
           contentType,
           theme,
           caption: generatedCaption,
           hashtags: generatedHashtags.split(/\s+/).filter((h) => h.startsWith("#")),
           extraNotes: extraNotes || undefined,
+          secondaryProductKodes: comboSecondaryProduct ? [comboSecondaryProduct.kode] : [],
         }),
       });
       const data = await res.json();
@@ -393,6 +589,7 @@ export default function ContentStudioPage() {
       toast.success("Draft konten tersimpan");
       setGeneratedCaption("");
       setGeneratedHashtags("");
+      setComboSecondaryProduct(null);
       await loadPosts();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Simpan draft gagal");
@@ -540,7 +737,7 @@ export default function ContentStudioPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <CardTitle>1. Generate Caption</CardTitle>
@@ -560,7 +757,7 @@ export default function ContentStudioPage() {
               </div>
             </div>
 
-            <div className="grid max-h-56 grid-cols-4 gap-2 overflow-y-auto rounded-md border border-border p-2 sm:grid-cols-6">
+            <div className="grid max-h-80 grid-cols-3 gap-2 overflow-y-auto rounded-md border border-border p-2 sm:grid-cols-5">
               {loadingProducts ? (
                 <p className="col-span-full py-6 text-center text-sm text-text-faint">Memuat...</p>
               ) : productResults.length === 0 ? (
@@ -583,7 +780,13 @@ export default function ContentStudioPage() {
                       <div className="flex aspect-square w-full items-center justify-center bg-surface-2">
                         {p.image ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.image} alt={p.nama} className="h-full w-full object-cover" />
+                          <img
+                            src={p.image}
+                            alt={p.nama}
+                            loading="lazy"
+                            decoding="async"
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
                           <ImageIcon className="h-5 w-5 text-text-faint" />
                         )}
@@ -607,9 +810,9 @@ export default function ContentStudioPage() {
                 <div>
                   <Label>Foto</Label>
                   <p className="mb-2 text-xs text-text-faint">
-                    {contentType === "carousel"
-                      ? "Pilih 2-10 foto (urutan klik = urutan slide)."
-                      : "Pilih 1 foto."}
+                    {contentType === "reel"
+                      ? "Pilih 1 foto (Reel pakai video, foto ini cuma cover)."
+                      : "Pilih 1 foto, atau 2-10 foto untuk Carousel (urutan klik = urutan slide) — Format otomatis berubah jadi Carousel begitu kamu pilih lebih dari 1."}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {photoOptions(selectedProduct).map((opt) => {
@@ -627,7 +830,13 @@ export default function ContentStudioPage() {
                           title={opt.label}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={opt.url} alt={opt.label} className="h-full w-full object-cover" />
+                          <img
+                            src={opt.url}
+                            alt={opt.label}
+                            loading="lazy"
+                            decoding="async"
+                            className="h-full w-full object-cover"
+                          />
                           {active && contentType === "carousel" && (
                             <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gold text-[10px] font-medium text-ink">
                               {idx + 1}
@@ -637,6 +846,165 @@ export default function ContentStudioPage() {
                       );
                     })}
                   </div>
+                </div>
+
+                <div className="flex flex-col gap-3 rounded-md border border-border-strong bg-surface p-3">
+                  <Label className="!mb-0">Foto Gabungan Produk (AI, opsional)</Label>
+                  <FieldHint>
+                    Gabungkan foto produk ini dengan foto produk LAIN jadi satu frame baru — seolah 2
+                    model tampil bersama (mis. &quot;dipadukan bersama&quot; / mix and match 2 koleksi). Ini fitur
+                    eksperimental: menggabungkan 2 wajah + 2 baju berbeda lebih sulit buat AI dibanding
+                    restyle 1 foto, jadi review hasilnya baik-baik, generate ulang kalau ada yang meleset.
+                  </FieldHint>
+
+                  {!secondProduct ? (
+                    <div>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint" />
+                        <Input
+                          value={secondProductQuery}
+                          onChange={(e) => setSecondProductQuery(e.target.value)}
+                          placeholder="Cari produk kedua (kode/nama)"
+                          className="pl-9"
+                        />
+                      </div>
+                      {secondProductQuery.trim() && (
+                        <div className="mt-2 grid max-h-56 grid-cols-4 gap-2 overflow-y-auto rounded-md border border-border p-2 sm:grid-cols-6">
+                          {loadingSecondProducts ? (
+                            <p className="col-span-full py-4 text-center text-xs text-text-faint">Memuat...</p>
+                          ) : secondProductResults.length === 0 ? (
+                            <p className="col-span-full py-4 text-center text-xs text-text-faint">
+                              Tidak ada produk yang cocok.
+                            </p>
+                          ) : (
+                            secondProductResults.map((p) => (
+                              <button
+                                type="button"
+                                key={p.kode}
+                                onClick={() => selectSecondProduct(p)}
+                                className="group relative overflow-hidden rounded-md border-2 border-transparent text-left transition-colors hover:border-border-strong"
+                              >
+                                <div className="flex aspect-square w-full items-center justify-center bg-surface-2">
+                                  {p.image ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={p.image}
+                                      alt={p.nama}
+                                      loading="lazy"
+                                      decoding="async"
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <ImageIcon className="h-5 w-5 text-text-faint" />
+                                  )}
+                                </div>
+                                <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1 py-0.5 text-[9px] leading-tight text-white">
+                                  {p.kode}
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-2 rounded-md border border-border p-2">
+                        <div className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={secondProductPhotoUrl || secondProduct.image || ""}
+                            alt={secondProduct.nama}
+                            className="h-12 w-12 rounded-md border border-border-strong object-cover"
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-text">{secondProduct.kode}</span>
+                            <span className="text-xs text-text-faint">{secondProduct.nama}</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSecondProduct(null);
+                            setSecondProductQuery("");
+                            setSecondProductPhotoUrl(null);
+                            setComboPhotoUrl(null);
+                          }}
+                          className="text-xs text-text-faint hover:text-danger"
+                        >
+                          Ganti produk
+                        </button>
+                      </div>
+
+                      {photoOptions(secondProduct).length > 1 && (
+                        <div className="flex flex-wrap gap-2">
+                          {photoOptions(secondProduct).map((opt) => (
+                            <button
+                              key={opt.url}
+                              type="button"
+                              onClick={() => {
+                                setSecondProductPhotoUrl(opt.url);
+                                setComboPhotoUrl(null);
+                              }}
+                              title={opt.label}
+                              className={cn(
+                                "h-12 w-12 overflow-hidden rounded-md border-2 transition-colors",
+                                secondProductPhotoUrl === opt.url
+                                  ? "border-gold"
+                                  : "border-border-strong hover:border-text-faint"
+                              )}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={opt.url}
+                                alt={opt.label}
+                                loading="lazy"
+                                decoding="async"
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <Textarea
+                        rows={2}
+                        value={comboSceneIdea}
+                        onChange={(e) => {
+                          setComboSceneIdea(e.target.value);
+                          setComboPhotoUrl(null);
+                        }}
+                        placeholder="mis. two friends laughing together while walking through a sunlit garden path"
+                      />
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          loading={generatingCombo}
+                          disabled={!comboSceneIdea.trim() || selectedPhotoUrls.length === 0}
+                          onClick={handleGenerateCombo}
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {comboPhotoUrl ? "Generate Ulang" : "Generate Foto Gabungan (AI)"}
+                        </Button>
+                      </div>
+
+                      {comboPhotoUrl && (
+                        <div className="flex flex-col gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={comboPhotoUrl}
+                            alt="Foto gabungan hasil AI"
+                            className="w-full max-w-[220px] self-center rounded-md border border-border-strong"
+                          />
+                          <Button type="button" size="sm" onClick={useComboPhotoAsSlide}>
+                            Tambahkan ke Foto
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -747,45 +1115,87 @@ export default function ContentStudioPage() {
                         )}
                       </div>
 
-                      {sceneIdea && (
-                        <div className="flex flex-col gap-2 rounded-md border border-border-strong bg-surface p-3">
-                          <Label className="!mb-0">Foto Marketing AI (opsional)</Label>
+                      {sceneIdea && selectedPhotoUrls.length > 0 && (
+                        <div className="flex flex-col gap-3 rounded-md border border-border-strong bg-surface p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="!mb-0">Foto Marketing AI (opsional)</Label>
+                            {selectedPhotoUrls.length > 1 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                loading={generatingStoryboard}
+                                onClick={handleSuggestStoryboard}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Generate Alur Cerita
+                              </Button>
+                            )}
+                          </div>
                           <FieldHint>
-                            Foto produk yang sudah ada di-generate ULANG cuma bagian suasana/scene-nya
-                            (model & baju tetap 100% sama) sesuai arahan AI social media specialist di
-                            bawah ini — biar hasilnya tidak persis foto katalog polos. Bisa diedit dulu
-                            sebelum di-generate.
+                            Tiap foto yang kamu pilih di atas bisa di-generate ULANG suasana/scene-nya
+                            (model & baju tetap 100% sama). Klik satu-satu kalau mau atur sendiri, atau
+                            klik &quot;Generate Alur Cerita&quot; supaya AI merancang SATU cerita yang nyambung utk
+                            semua slide sekaligus (tiap slide beda momen, tapi tetap 1 alur yang sama) —
+                            baru review/edit arahannya sebelum generate tiap foto.
                           </FieldHint>
-                          <Textarea
-                            rows={2}
-                            value={sceneIdea}
-                            onChange={(e) => setSceneIdea(e.target.value)}
-                            placeholder="mis. warm minimalist living room, golden hour window light"
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            loading={generatingMarketingPhoto}
-                            disabled={!sceneIdea.trim() || selectedPhotoUrls.length === 0}
-                            onClick={handleGenerateMarketingPhoto}
-                          >
-                            <Sparkles className="h-3.5 w-3.5" />
-                            {marketingPhotoUrl ? "Generate Ulang Foto Marketing" : "Generate Foto Marketing (AI)"}
-                          </Button>
-                          {marketingPhotoUrl && (
-                            <div className="flex flex-col gap-1">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={marketingPhotoUrl}
-                                alt="Foto marketing hasil AI"
-                                className="w-full max-w-[220px] self-center rounded-md border border-border-strong"
-                              />
-                              <p className="text-center text-xs text-text-faint">
-                                Foto ini yang akan dipakai sbg background poster (bukan foto katalog asli).
-                              </p>
-                            </div>
-                          )}
+                          <div className="flex flex-col gap-3">
+                            {selectedPhotoUrls.map((url, i) => {
+                              const slot = marketingOverrides[url];
+                              const scene = slotSceneIdea(url);
+                              return (
+                                <div
+                                  key={url}
+                                  className="flex flex-col gap-2 rounded-md border border-border p-2 sm:flex-row"
+                                >
+                                  <div className="flex shrink-0 flex-row items-center gap-2 sm:flex-col">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={slot?.url || url}
+                                      alt={`Foto ${i + 1}`}
+                                      loading="lazy"
+                                      decoding="async"
+                                      className="h-16 w-16 rounded-md border border-border-strong object-cover"
+                                    />
+                                    <span className="text-center text-[10px] leading-tight text-text-faint">
+                                      {i === 0 ? "Foto 1 (bg poster)" : `Foto ${i + 1}`}
+                                      {slot?.label ? ` — ${slot.label}` : ""}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-1 flex-col gap-2">
+                                    <Textarea
+                                      rows={2}
+                                      value={scene}
+                                      onChange={(e) => updateSlotSceneIdea(url, e.target.value)}
+                                      placeholder="mis. warm minimalist living room, golden hour window light"
+                                    />
+                                    <div className="flex items-center gap-3">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        loading={slot?.generating}
+                                        disabled={!scene.trim()}
+                                        onClick={() => handleGenerateMarketingPhoto(url)}
+                                      >
+                                        <Sparkles className="h-3.5 w-3.5" />
+                                        {slot?.url ? "Generate Ulang" : "Generate Foto Ini (AI)"}
+                                      </Button>
+                                      {slot?.url && (
+                                        <button
+                                          type="button"
+                                          onClick={() => resetMarketingOverride(url)}
+                                          className="text-xs text-text-faint hover:text-danger"
+                                        >
+                                          Pakai foto asli
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
 
@@ -978,6 +1388,8 @@ export default function ContentStudioPage() {
                           key={i}
                           src={url}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-16 w-16 rounded-md object-cover sm:h-20 sm:w-20"
                         />
                       ))}

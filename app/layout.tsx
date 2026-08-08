@@ -4,8 +4,8 @@ import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Fashion Studio — Deera",
-  description: "Generate foto katalog gamis pakai AI (FLUX Virtual Try-On).",
+  title: "Deera Studio",
+  description: "Deera Studio — generate foto katalog & konten marketing gamis pakai AI.",
 };
 
 export default function RootLayout({

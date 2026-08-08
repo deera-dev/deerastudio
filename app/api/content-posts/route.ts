@@ -17,6 +17,7 @@ const requestSchema = z.object({
   hashtags: z.array(z.string()).default([]),
   extraNotes: z.string().optional(),
   scheduledAt: z.string().datetime().optional().nullable(),
+  secondaryProductKodes: z.array(z.string()).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
     .from("content_posts")
     .insert({
       product_kode: body.data.productKode,
+      secondary_product_kodes: body.data.secondaryProductKodes ?? [],
       image_urls: body.data.imageUrls,
       content_type: body.data.contentType,
       theme: body.data.theme,
