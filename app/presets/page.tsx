@@ -155,7 +155,9 @@ function BackgroundPresetsSection() {
   const activeCount = presets.filter((p) => p.is_active).length;
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
+    // REVISI Agustus 2026 v2 (feedback admin: "column base") — form &
+    // daftar preset stack vertikal full-width, bukan sidebar+main lagi.
+    <div className="flex flex-col gap-6">
       <Card className="h-fit">
         <CardHeader>
           <CardTitle>Tambah Preset Background</CardTitle>
@@ -371,7 +373,7 @@ function AccessoryPresetsSection() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
+    <div className="flex flex-col gap-6">
       <Card className="h-fit">
         <CardHeader>
           <CardTitle>Tambah Preset Aksesoris</CardTitle>

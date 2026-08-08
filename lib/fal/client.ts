@@ -30,6 +30,21 @@ export const FAL_MODELS = {
   // format ("anthropic/claude-sonnet-4.5"). Reuse FAL_KEY yang sama — tidak
   // perlu vendor/API key baru. Lihat lib/fal/text.ts.
   TEXT_ROUTER: "openrouter/router",
+  // Video generation (Agustus 2026) — image-to-video dari 1 foto produk.
+  // Dipakai Content Studio (Reel) & "Generate Video" di History/Generate.
+  // Tier Pro dipilih (bukan Standard) utk kualitas gerakan lebih halus.
+  // Param `duration`: integer 3-15 (detik), default 5 — HARD CAP 15 detik
+  // per 1x generate. User minta 15-20 detik; kita clamp ke 15 (maksimal
+  // yang didukung API) — lihat lib/fal/video.ts utk detail clamp.
+  KLING_VIDEO_PRO: "fal-ai/kling-video/v3/pro/image-to-video",
+  // Gabung beberapa video jadi 1 file, URUT sesuai array video_urls —
+  // dipakai fitur "video cerita gabungan" (Agustus 2026): tiap foto post
+  // dianimasikan jadi 1 klip pendek (Kling, di atas) lalu SEMUA klip
+  // digabung jadi satu video utuh lewat endpoint ini. Dipilih drpd
+  // ffmpeg lokal supaya konsisten dgn arsitektur app ini (semua compute
+  // berat didelegasikan ke fal.ai, bukan proses di server Next.js sendiri
+  // — menghindari ketergantungan binary ffmpeg di environment deploy).
+  FFMPEG_MERGE_VIDEOS: "fal-ai/ffmpeg-api/merge-videos",
 } as const;
 
 // Model text-gen default utk Content Studio — kualitas tinggi (bukan model

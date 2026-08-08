@@ -31,6 +31,7 @@ import { useMarketingPhotos } from "./_hooks/useMarketingPhotos";
 import { useGroupCombo } from "./_hooks/useGroupCombo";
 import { usePosterAi } from "./_hooks/usePosterAi";
 import { useCaptionGeneration } from "./_hooks/useCaptionGeneration";
+import { useVideoGeneration } from "./_hooks/useVideoGeneration";
 import { useCalendar } from "./_hooks/useCalendar";
 import { useContentPosts } from "./_hooks/useContentPosts";
 
@@ -40,6 +41,7 @@ import { GroupComboPanel } from "./_components/GroupComboPanel";
 import { PhotoPickerGrid } from "./_components/PhotoPickerGrid";
 import { ContentSettingsFields } from "./_components/ContentSettingsFields";
 import { PosterPanel } from "./_components/PosterPanel";
+import { VideoPanel } from "./_components/VideoPanel";
 import { CaptionResultPanel } from "./_components/CaptionResultPanel";
 import { CalendarPanel } from "./_components/CalendarPanel";
 import { PostsList } from "./_components/PostsList";
@@ -64,6 +66,7 @@ export default function ContentStudioPage() {
 
   const additionalProductKodes = isGroupContent ? selectedProducts.slice(1).map((p) => p.kode) : [];
   const contentPosts = useContentPosts();
+  const videoGen = useVideoGeneration(selectedProduct);
   const captionGen = useCaptionGeneration(
     selectedProduct,
     theme,
@@ -74,6 +77,7 @@ export default function ContentStudioPage() {
     () => {
       contentPosts.loadPosts();
       groupCombo.resetAll();
+      videoGen.resetAll();
     }
   );
   const calendar = useCalendar(contentPosts.loadPosts);
@@ -88,6 +92,7 @@ export default function ContentStudioPage() {
     posterAi.resetAll();
     marketingPhotos.resetAll();
     groupCombo.resetAll();
+    videoGen.resetAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProduct?.kode]);
 
@@ -99,6 +104,15 @@ export default function ContentStudioPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupCombo.resultUrls.length]);
+
+  // Isi kandidat foto utk Video Cerita Gabungan tiap kali foto post final
+  // berubah (foto individual dipilih/diganti, atau hasil Foto Gabungan
+  // Grup bertambah) — default select SEMUA foto yang tersedia, admin
+  // tinggal uncheck yang tidak mau dipakai (lihat VideoPanel).
+  useEffect(() => {
+    videoGen.initCandidates(finalImageUrls);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalImageUrls.join("|")]);
 
   function usePosterAsPhoto() {
     if (!posterAi.posterPreviewUrl) return;
@@ -184,6 +198,27 @@ export default function ContentStudioPage() {
                   onExtraNotesChange={setExtraNotes}
                 />
 
+                {photoSelection.contentType === "reel" && (
+                  <VideoPanel
+                    candidateUrls={finalImageUrls}
+                    composeUrls={videoGen.composeUrls}
+                    onToggleCompose={videoGen.toggleComposeUrl}
+                    videoPrompt={videoGen.videoPrompt}
+                    onVideoPromptChange={videoGen.setVideoPrompt}
+                    videoDuration={videoGen.videoDuration}
+                    onVideoDurationChange={videoGen.setVideoDuration}
+                    suggestingMotion={videoGen.suggestingMotion}
+                    onSuggestMotion={() => videoGen.handleSuggestMotion(marketingPhotos.sceneIdea || undefined)}
+                    submittingVideo={videoGen.submittingVideo}
+                    onGenerateVideo={videoGen.handleGenerateVideo}
+                    videoStatus={videoGen.videoStatus}
+                    videoUrl={videoGen.videoUrl}
+                    errorMessage={videoGen.errorMessage}
+                    clipJobs={videoGen.clipJobs}
+                    elapsedSeconds={videoGen.elapsedSeconds}
+                  />
+                )}
+
                 <PosterPanel
                   isGroupContent={isGroupContent}
                   posterHeadline={posterAi.posterHeadline}
@@ -251,7 +286,7 @@ export default function ContentStudioPage() {
                     onHashtagsChange={captionGen.setGeneratedHashtags}
                     savingDraft={captionGen.savingDraft}
                     canSave={canSaveDraft}
-                    onSaveDraft={() => captionGen.handleSaveDraft(finalImageUrls)}
+                    onSaveDraft={() => captionGen.handleSaveDraft(finalImageUrls, videoGen.videoUrl)}
                   />
                 )}
               </>

@@ -18,6 +18,9 @@ const requestSchema = z.object({
   extraNotes: z.string().optional(),
   scheduledAt: z.string().datetime().optional().nullable(),
   secondaryProductKodes: z.array(z.string()).optional(),
+  // Video (Agustus 2026) — opsional, hasil "Generate Video (AI)" Content
+  // Studio (khusus contentType "reel"), lihat lib/fal/video.ts.
+  videoUrl: z.string().url().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -45,6 +48,7 @@ export async function POST(req: NextRequest) {
       scheduled_at: body.data.scheduledAt ?? null,
       status: body.data.scheduledAt ? "scheduled" : "draft",
       created_by_email: user?.email ?? null,
+      video_url: body.data.videoUrl ?? null,
     })
     .select()
     .single();

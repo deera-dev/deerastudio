@@ -49,9 +49,9 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
-        className="w-full max-w-sm rounded-xl border border-border bg-surface/90 p-8 shadow-2xl"
+        className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/[0.08] bg-surface/55 p-8 shadow-[0_1px_0_0_rgba(255,255,255,0.07)_inset,0_32px_64px_-28px_rgba(0,0,0,0.85)] backdrop-blur-2xl before:pointer-events-none before:absolute before:inset-0 before:bg-gradient-to-br before:from-white/[0.07] before:via-white/[0.015] before:to-transparent"
       >
-        <div className="mb-6 flex flex-col items-center text-center">
+        <div className="relative mb-6 flex flex-col items-center text-center">
           <Image
             src="/deera-logo-lg.png"
             alt="Deera Studio"
@@ -64,7 +64,7 @@ export default function LoginPage() {
             Masuk pakai akun Deera yang sama (admin.deera.id).
           </p>
         </div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="relative flex flex-col gap-4">
           <div>
             <Label htmlFor="email">Username</Label>
             <div className="flex items-stretch">

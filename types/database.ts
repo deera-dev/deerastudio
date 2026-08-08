@@ -82,6 +82,29 @@ export interface GenerationSet {
   published_at: string | null;
   published_image_urls: Record<string, string | string[]> | null;
   created_at: string;
+  // Video "cerita gabungan" (Agustus 2026, REVISI v2) — SEMUA foto
+  // terpilih dianimasikan jadi klip pendek lalu digabung URUT jadi SATU
+  // video utuh (lihat lib/fal/video.ts). null di semua field berarti
+  // belum pernah diminta generate video utk set ini.
+  video_status: "processing" | "completed" | "failed" | null;
+  video_url: string | null;
+  video_error_message: string | null;
+  video_started_at: string | null;
+  video_clip_jobs: VideoClipJob[];
+  video_merge_request_id: string | null;
+  video_cost: number | null;
+}
+
+// Status 1 klip Kling individual sebelum digabung — dipakai polling utk
+// reconcile progress kapan saja (termasuk setelah admin pindah halaman
+// lalu balik lagi, lihat app/api/generation-sets/[id]/generate-video/).
+export type VideoClipJobStatus = "queued" | "processing" | "completed" | "failed";
+export interface VideoClipJob {
+  requestId: string;
+  sourceUrl: string; // foto sumber klip ini (salah satu ai_generations.output_image_url)
+  status: VideoClipJobStatus;
+  clipUrl: string | null; // URL klip Kling individual, terisi setelah status "completed"
+  errorMessage?: string | null;
 }
 
 // "detail" = crop close-up (jahitan/kancing/kerah) diturunkan dari foto
@@ -112,6 +135,13 @@ export interface Generation {
   cost: number | null;
   error_message: string | null;
   created_at: string;
+  // Video (Agustus 2026) — animasi opsional dari foto ini via Kling 3.0
+  // Pro image-to-video (lib/fal/video.ts). null di semua field berarti
+  // belum pernah diminta generate video utk baris ini.
+  video_url: string | null;
+  video_status: GenerationStatus | null;
+  video_generation_time_ms: number | null;
+  video_cost: number | null;
 }
 
 // Content Studio (Agustus 2026) — konten marketing Instagram (caption,
@@ -144,4 +174,8 @@ export interface ContentPost {
   created_by_email: string | null;
   created_at: string;
   updated_at: string;
+  // Video (Agustus 2026) — opsional, hasil Content Studio "Generate Video
+  // (AI)" (khusus content_type "reel"), lihat lib/fal/video.ts. null
+  // berarti post ini belum/tidak punya video.
+  video_url: string | null;
 }

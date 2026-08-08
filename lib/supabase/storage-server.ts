@@ -14,7 +14,8 @@ export async function uploadBufferToStorage(
   contentType: string = "image/jpeg"
 ): Promise<string> {
   const supabase = createServiceRoleClient();
-  const ext = contentType === "image/png" ? "png" : "jpg";
+  const ext =
+    contentType === "image/png" ? "png" : contentType === "video/mp4" ? "mp4" : "jpg";
   const path = `${folder}/${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {

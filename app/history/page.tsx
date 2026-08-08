@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock, Plus, RefreshCw, UploadCloud } from "lucide-react";
+import { CheckCircle2, Clock, Film, Loader2, Plus, RefreshCw, Sparkles, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Label, Select } from "@/components/ui/Field";
+import { Label, Select, Textarea, FieldHint } from "@/components/ui/Field";
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,18 @@ export default function HistoryPage() {
   const [addSeriWarna, setAddSeriWarna] = useState("");
   const [addSeriImage, setAddSeriImage] = useState<string | null>(null);
   const [addingSeri, setAddingSeri] = useState(false);
+  // "Video Cerita Gabungan (AI)" (Agustus 2026, REVISI v2) — admin minta
+  // SEMUA foto post digabung jadi 1 video utuh (bukan pilih 1 foto), jadi
+  // panel ini level SET (bukan per-foto lagi seperti versi lama). Progress
+  // asli (video_status/video_clip_jobs/video_url) disimpan di
+  // ai_generation_sets & dipoll dari sana — lihat effect polling di bawah
+  // & app/api/generation-sets/[id]/generate-video/{route,status/route}.ts.
+  const [composeUrls, setComposeUrls] = useState<string[]>([]); // urut = urutan cerita
+  const [videoPrompt, setVideoPrompt] = useState("");
+  const [videoDuration, setVideoDuration] = useState(5); // per-klip
+  const [suggestingMotion, setSuggestingMotion] = useState(false);
+  const [submittingVideo, setSubmittingVideo] = useState(false);
+  const [videoNowTick, setVideoNowTick] = useState(() => Date.now()); // detak elapsed-time saat processing
 
   async function load() {
     setLoading(true);
@@ -77,6 +89,15 @@ export default function HistoryPage() {
   useEffect(() => {
     setAddSeriWarna("");
     setAddSeriImage(null);
+    setVideoPrompt("");
+    // Default: semua foto yang SUDAH SELESAI di set ini, urut sesuai
+    // tampilan grid (utama dulu, lalu detail/angle/seri) — admin tinggal
+    // uncheck yang tidak mau dipakai, atau toggle ulang utk atur urutan.
+    setComposeUrls(
+      (selected?.ai_generations ?? [])
+        .filter((g) => g.status === "completed" && g.output_image_url)
+        .map((g) => g.output_image_url as string)
+    );
     if (!selected) {
       setProductWarnaOptions([]);
       return;
@@ -95,7 +116,50 @@ export default function HistoryPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.product_kode]);
+  }, [selected?.id]);
+
+  // Polling "Video Cerita Gabungan" — jalan HANYA saat video_status set
+  // yang sedang dibuka === "processing". Semua progress disimpan di DB
+  // (ai_generation_sets.video_*), jadi polling ini aman dimulai ulang
+  // kapan saja (termasuk setelah admin pindah halaman lalu balik &
+  // membuka set yang sama lagi — progress lanjut dari titik terakhir,
+  // tidak hilang). Lihat app/api/generation-sets/[id]/generate-video/status/.
+  useEffect(() => {
+    if (!selected || selected.video_status !== "processing") return;
+    let cancelled = false;
+    const tick = setInterval(() => setVideoNowTick(Date.now()), 1000);
+    const poll = setInterval(async () => {
+      const res = await fetch(`/api/generation-sets/${selected.id}/generate-video/status`);
+      if (!res.ok || cancelled) return;
+      const data = await res.json();
+      if (cancelled) return;
+      setSets((prev) =>
+        prev.map((s) =>
+          s.id === selected.id
+            ? {
+                ...s,
+                video_status: data.videoStatus,
+                video_url: data.videoUrl,
+                video_error_message: data.errorMessage,
+                video_clip_jobs: data.clipJobs,
+              }
+            : s
+        )
+      );
+      if (data.videoStatus === "completed") toast.success("Video cerita gabungan selesai!");
+      if (data.videoStatus === "failed") toast.error(data.errorMessage || "Generate video gagal");
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(tick);
+      clearInterval(poll);
+    };
+    // Sengaja cuma depend on id+status (bukan objek `selected` utuh) —
+    // field lain (video_clip_jobs dll) BERUBAH tiap kali polling ini
+    // sendiri nulis lewat setSets, kalau ikut jadi dependency effect ini
+    // akan restart interval terus-menerus tiap 3 detik.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.video_status]);
 
   // Warna yang belum punya baris "seri" di set ini & bukan warna utama —
   // itulah pilihan yang tersisa utk ditambahkan.
@@ -133,6 +197,57 @@ export default function HistoryPage() {
       toast.error(err instanceof Error ? err.message : "Regenerate gagal");
     } finally {
       setRegeneratingId(null);
+    }
+  }
+
+  function toggleComposeUrl(url: string) {
+    setComposeUrls((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]));
+  }
+
+  async function handleSuggestMotion() {
+    if (!selected) return;
+    setSuggestingMotion(true);
+    try {
+      const res = await fetch("/api/generate-video-motion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productKode: selected.product_kode,
+          durationSeconds: videoDuration,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Gagal menyarankan motion prompt");
+      setVideoPrompt(data.motionPrompt);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menyarankan motion prompt");
+    } finally {
+      setSuggestingMotion(false);
+    }
+  }
+
+  async function handleGenerateVideo() {
+    if (!selected || composeUrls.length === 0 || !videoPrompt.trim()) return;
+    setSubmittingVideo(true);
+    try {
+      const res = await fetch(`/api/generation-sets/${selected.id}/generate-video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceImageUrls: composeUrls,
+          prompt: videoPrompt.trim(),
+          durationPerClipSeconds: videoDuration,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Generate video gagal");
+      toast.success(`Mulai generate ${composeUrls.length} klip video...`);
+      setVideoNowTick(Date.now());
+      await refreshOne(selected.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generate video gagal");
+    } finally {
+      setSubmittingVideo(false);
     }
   }
 
@@ -234,7 +349,10 @@ export default function HistoryPage() {
           <p className="text-sm text-text-muted">Belum ada riwayat generate.</p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
+        // REVISI Agustus 2026 v2 (feedback admin: "column base") — daftar
+        // riwayat & panel detail stack vertikal full-width, bukan
+        // sidebar+main lagi.
+        <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
             {sets.map((set) => {
               const utama = set.ai_generations.find((g) => g.image_role === "utama");
@@ -328,23 +446,173 @@ export default function HistoryPage() {
                                 <span className="text-text-muted"> — {gen.variant_warna}</span>
                               )}
                             </div>
-                            <div className="text-xs text-text-faint">{gen.status}</div>
+                            <div className="text-xs text-text-faint">
+                              {gen.status}
+                              {gen.video_status === "completed" && gen.video_url && (
+                                <span className="ml-1 text-gold">· video</span>
+                              )}
+                            </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRegenerate(gen.id)}
-                            disabled={regeneratingId === gen.id}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-text-faint hover:bg-surface hover:text-gold disabled:opacity-50"
-                            title="Generate ulang"
-                          >
-                            <RefreshCw
-                              className={cn("h-3.5 w-3.5", regeneratingId === gen.id && "animate-spin")}
-                            />
-                          </button>
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerate(gen.id)}
+                              disabled={regeneratingId === gen.id}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-text-faint hover:bg-surface hover:text-gold disabled:opacity-50"
+                              title="Generate ulang"
+                            >
+                              <RefreshCw
+                                className={cn("h-3.5 w-3.5", regeneratingId === gen.id && "animate-spin")}
+                              />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
+
+{(() => {
+                    const completedPhotos = selected.ai_generations.filter(
+                      (g) => g.status === "completed" && g.output_image_url
+                    );
+                    const videoStatus = selected.video_status;
+                    const clipJobs = selected.video_clip_jobs ?? [];
+                    const doneClips = clipJobs.filter((j) => j.status === "completed").length;
+                    const stageLabel =
+                      clipJobs.length === 0
+                        ? "Memulai..."
+                        : doneClips < clipJobs.length
+                          ? `Generate klip ${doneClips}/${clipJobs.length}...`
+                          : "Menggabungkan video...";
+                    const elapsedSeconds = selected.video_started_at
+                      ? Math.max(0, Math.floor((videoNowTick - new Date(selected.video_started_at).getTime()) / 1000))
+                      : 0;
+
+                    return (
+                      <div className="mt-4 rounded-lg border border-border bg-surface-2 p-3">
+                        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-text">
+                          <Film className="h-3.5 w-3.5 text-gold" />
+                          Video Cerita Gabungan (AI)
+                        </div>
+                        <p className="mb-3 text-xs text-text-faint">
+                          Foto tetap 100% sama — tiap foto terpilih di bawah dianimasikan jadi klip
+                          pendek (gerakan halus, tanpa audio), lalu SEMUA klip digabung urut jadi 1
+                          video utuh. Kling 3.0 Pro maks 15 detik per klip.
+                        </p>
+
+                        {videoStatus === "processing" && (
+                          <div className="mb-3 flex items-center gap-2 rounded-md border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-gold-soft">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {stageLabel} · {elapsedSeconds}s berjalan
+                          </div>
+                        )}
+
+                        {videoStatus === "failed" && selected.video_error_message && (
+                          <div className="mb-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
+                            Gagal: {selected.video_error_message}
+                          </div>
+                        )}
+
+                        {videoStatus === "completed" && selected.video_url && (
+                          <div className="mb-3 overflow-hidden rounded-md border border-border">
+                            <video
+                              src={selected.video_url}
+                              controls
+                              loop
+                              className="aspect-[3/4] w-full max-w-[220px] bg-black object-cover"
+                            />
+                          </div>
+                        )}
+
+                        {completedPhotos.length === 0 ? (
+                          <FieldHint>Belum ada foto yang selesai digenerate di set ini.</FieldHint>
+                        ) : (
+                          <>
+                            <Label>Foto yang dipakai (urut sesuai klik)</Label>
+                            <div className="mb-3 flex flex-wrap gap-2">
+                              {completedPhotos.map((g) => {
+                                const url = g.output_image_url as string;
+                                const order = composeUrls.indexOf(url);
+                                return (
+                                  <button
+                                    key={g.id}
+                                    type="button"
+                                    onClick={() => toggleComposeUrl(url)}
+                                    className={cn(
+                                      "relative h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition-colors",
+                                      order >= 0 ? "border-gold" : "border-border-strong hover:border-border"
+                                    )}
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={url} alt={g.image_role} className="h-full w-full object-cover" />
+                                    {order >= 0 && (
+                                      <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gold text-[10px] font-semibold text-ink">
+                                        {order + 1}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <div className="flex flex-wrap items-end gap-3">
+                              <div className="w-28">
+                                <Label htmlFor="video-duration">Durasi/klip</Label>
+                                <Select
+                                  id="video-duration"
+                                  value={videoDuration}
+                                  onChange={(e) => setVideoDuration(Number(e.target.value))}
+                                >
+                                  {[3, 5, 8, 10, 12, 15].map((d) => (
+                                    <option key={d} value={d}>
+                                      {d}s
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+                              <div className="min-w-[240px] flex-1">
+                                <div className="mb-1.5 flex items-center justify-between">
+                                  <Label htmlFor="video-prompt" className="mb-0">
+                                    Motion Prompt (Inggris)
+                                  </Label>
+                                  <button
+                                    type="button"
+                                    onClick={handleSuggestMotion}
+                                    disabled={suggestingMotion}
+                                    className="flex items-center gap-1 text-xs font-medium text-gold hover:text-gold-soft disabled:opacity-50"
+                                  >
+                                    <Sparkles className={cn("h-3 w-3", suggestingMotion && "animate-pulse")} />
+                                    Sarankan (AI)
+                                  </button>
+                                </div>
+                                <Textarea
+                                  id="video-prompt"
+                                  rows={2}
+                                  value={videoPrompt}
+                                  onChange={(e) => setVideoPrompt(e.target.value)}
+                                  placeholder="mis. Fabric sways gently in a soft breeze, slow camera push-in..."
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                loading={submittingVideo || videoStatus === "processing"}
+                                disabled={composeUrls.length === 0 || !videoPrompt.trim()}
+                                onClick={handleGenerateVideo}
+                              >
+                                <Film className="h-4 w-4" />
+                                {videoStatus === "completed" ? "Generate Ulang" : "Generate"}
+                              </Button>
+                            </div>
+                            <FieldHint>
+                              {composeUrls.length} foto dipilih · total ±
+                              {composeUrls.length * videoDuration} detik video
+                            </FieldHint>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {availableSeriWarna.length > 0 && (
                     <div className="mt-4 rounded-lg border border-border bg-surface-2 p-3">

@@ -12,8 +12,11 @@ export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLab
   );
 }
 
+// REVISI Agustus 2026 v2 — translucent putih tipis + backdrop-blur (bukan
+// bg-surface-2 solid) supaya konsisten dgn bahasa "kaca" Card/Button, dan
+// border putih transparan (bukan abu solid) utk tepi yang lebih halus.
 const fieldBase =
-  "w-full rounded-md border border-border-strong bg-surface-2 px-3.5 py-2.5 text-sm text-text placeholder:text-text-faint transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:opacity-50";
+  "w-full rounded-lg border border-white/[0.1] bg-white/[0.03] px-3.5 py-2.5 text-sm text-text placeholder:text-text-faint backdrop-blur-sm transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:opacity-50";
 
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(fieldBase, className)} {...props} />;
@@ -35,7 +38,7 @@ export function Select({
     <select
       className={cn(
         fieldBase,
-        "appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 20 20%22 fill=%22%23c7c0b0%22><path d=%22M5.5 7.5L10 12l4.5-4.5H5.5z%22/></svg>')] bg-[position:right_0.75rem_center] bg-no-repeat pr-9",
+        "appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 20 20%22 fill=%22%23918e9c%22><path d=%22M5.5 7.5L10 12l4.5-4.5H5.5z%22/></svg>')] bg-[position:right_0.75rem_center] bg-no-repeat pr-9",
         className
       )}
       {...props}

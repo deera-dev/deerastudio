@@ -2,6 +2,13 @@
 // Field upload gambar — drag & drop (react-dropzone) dengan preview besar dan
 // animasi (framer-motion). Upload ke Supabase Storage (lib/supabase/storage.ts).
 // Dipakai di Models, Poses, Generate, Presets.
+//
+// REVISI Agustus 2026 v2: sebelumnya kotak kosong pakai bg-surface-2 +
+// text-text-faint yang NYARIS SAMA TERANGNYA (lihat catatan globals.css)
+// — ikon ImagePlus & hint text jadi nyaris tidak terlihat sama sekali
+// (laporan admin: "kotak kosong keliatan blank"). Sekarang pakai glass
+// translucent + token text-faint yang sudah diperbaiki kontrasnya, plus
+// dashed border lebih jelas & hover state yang lebih hidup.
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { AnimatePresence, motion } from "framer-motion";
@@ -63,11 +70,11 @@ export function ImageUploadField({
       <div
         {...getRootProps()}
         className={cn(
-          "group relative w-full overflow-hidden rounded-lg border border-dashed transition-colors",
+          "group relative w-full overflow-hidden rounded-xl border-2 border-dashed backdrop-blur-sm transition-colors",
           aspect,
           isDragActive
-            ? "border-gold bg-gold/5"
-            : "border-border-strong bg-surface-2 hover:border-gold/60",
+            ? "border-gold bg-gold/[0.08]"
+            : "border-white/[0.14] bg-white/[0.025] hover:border-gold/50 hover:bg-gold/[0.04]",
           uploading && "pointer-events-none opacity-70"
         )}
       >
@@ -108,7 +115,7 @@ export function ImageUploadField({
               {uploading ? (
                 <Loader2 className="h-6 w-6 animate-spin text-gold" />
               ) : (
-                <ImagePlus className="h-6 w-6 text-text-faint" />
+                <ImagePlus className="h-6 w-6 text-text-faint transition-colors group-hover:text-gold-soft" />
               )}
               <p className="text-xs text-text-faint">
                 {uploading ? "Mengunggah..." : isDragActive ? "Lepas di sini" : "Tarik foto atau klik"}

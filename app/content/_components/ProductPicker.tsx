@@ -64,7 +64,7 @@ export function ProductPicker({
                 className={cn(
                   "group relative overflow-hidden rounded-lg border-2 text-left transition-all",
                   active
-                    ? "border-gold shadow-[0_0_0_3px_rgba(105,126,62,0.12)]"
+                    ? "border-gold shadow-[0_0_0_3px_rgba(217,162,78,0.18)]"
                     : "border-transparent hover:border-border-strong",
                   disabled && "cursor-not-allowed opacity-40"
                 )}

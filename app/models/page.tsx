@@ -91,7 +91,9 @@ export default function ModelsPage() {
         description="Model AI dipakai bareng pose (halaman Poses) sebagai referensi wajah & tubuh yang konsisten untuk hasil Virtual Try-On. Tidak perlu training — cukup nama + thumbnail."
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
+      {/* REVISI Agustus 2026 v2 (feedback admin: "column base") — form &
+          daftar model stack vertikal full-width, bukan sidebar+main lagi. */}
+      <div className="flex flex-col gap-6">
         <Card className="h-fit">
           <CardHeader>
             <CardTitle>Tambah Model</CardTitle>

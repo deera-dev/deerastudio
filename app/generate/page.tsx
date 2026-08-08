@@ -309,7 +309,10 @@ export default function GeneratePage() {
         })}
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* REVISI Agustus 2026 v2 (feedback admin: "column base, bukan row
+          base") — semua step sekarang stack vertikal full-width, bukan grid
+          2 kolom lagi. */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <CardTitle>1. Model &amp; Pose</CardTitle>
@@ -594,7 +597,7 @@ export default function GeneratePage() {
           </CardBody>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader>
             <CardTitle>3. Foto Flat-Lay Produk</CardTitle>
           </CardHeader>
@@ -748,7 +751,7 @@ export default function GeneratePage() {
           </CardBody>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader>
             <CardTitle>6. Jumlah Foto Close-Up</CardTitle>
           </CardHeader>
@@ -791,7 +794,7 @@ export default function GeneratePage() {
           </CardBody>
         </Card>
 
-        <div className="lg:col-span-2">
+        <div>
           <Button type="submit" size="lg" loading={submitting} disabled={!canSubmit}>
             <Wand2 className="h-4 w-4" />
             {submitting ? "Sedang generate..." : `Generate ${totalPhotos} Foto`}

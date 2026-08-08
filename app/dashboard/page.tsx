@@ -2,7 +2,8 @@
 // Dashboard — statistik sederhana: SKU diproses bulan ini, biaya
 // akumulasi, model aktif. Layout dikasih sentuhan modern (greeting +
 // tanggal, kartu stat dgn ikon pill & angka besar) terinspirasi dashboard
-// referensi admin, tetap pakai palet cream/olive/gold brand Deera.
+// referensi admin, dark glassmorphism (lihat globals.css & Card.tsx utk
+// bahasa visual "kaca" yang dipakai di seluruh app).
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Banknote, ImageIcon, UsersRound } from "lucide-react";
@@ -66,12 +67,12 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
-      <div className="relative mb-8 overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-surface to-surface-2 p-6 sm:p-8">
+      <div className="relative mb-8 overflow-hidden rounded-2xl border border-white/[0.08] bg-surface/55 p-6 shadow-[0_1px_0_0_rgba(255,255,255,0.07)_inset,0_32px_64px_-28px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:p-8">
         <div
-          className="pointer-events-none absolute inset-0 opacity-60"
+          className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 480px 240px at 90% -10%, rgba(246,221,139,0.4), transparent), radial-gradient(ellipse 360px 220px at 100% 110%, rgba(105,126,62,0.12), transparent)",
+              "radial-gradient(ellipse 480px 260px at 90% -15%, rgba(217,162,78,0.22), transparent), radial-gradient(ellipse 380px 240px at 105% 115%, rgba(139,124,240,0.16), transparent)",
           }}
         />
         <div className="relative">
@@ -94,7 +95,7 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: i * 0.05 }}
           >
-            <Card className="p-5 transition-shadow hover:shadow-[0_1px_0_0_rgba(202,177,112,0.06),0_16px_40px_-16px_rgba(46,54,32,0.18)]">
+            <Card className="p-5 transition-shadow hover:shadow-[0_1px_0_0_rgba(255,255,255,0.07)_inset,0_20px_48px_-20px_rgba(217,162,78,0.28)]">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-gold/10 text-gold">
                 <card.icon className="h-5 w-5" />
               </div>

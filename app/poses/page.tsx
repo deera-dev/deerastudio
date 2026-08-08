@@ -145,7 +145,9 @@ export default function PosesPage() {
       </div>
 
       {selectedModelId && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
+        // REVISI Agustus 2026 v2 (feedback admin: "column base") — form &
+        // daftar pose stack vertikal full-width, bukan sidebar+main lagi.
+        <div className="flex flex-col gap-6">
           <Card className="h-fit">
             <CardHeader>
               <CardTitle>Tambah Pose</CardTitle>

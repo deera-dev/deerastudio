@@ -67,7 +67,7 @@ export function useCaptionGeneration(
     }
   }
 
-  async function handleSaveDraft(imageUrls: string[]) {
+  async function handleSaveDraft(imageUrls: string[], videoUrl?: string | null) {
     if (!selectedProduct || !generatedCaption || imageUrls.length === 0) return;
     setSavingDraft(true);
     try {
@@ -83,6 +83,7 @@ export function useCaptionGeneration(
           hashtags: generatedHashtags.split(/\s+/).filter((h) => h.startsWith("#")),
           extraNotes: extraNotes || undefined,
           secondaryProductKodes: additionalProductKodes,
+          videoUrl: videoUrl || undefined,
         }),
       });
       const data = await res.json();
