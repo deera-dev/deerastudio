@@ -104,16 +104,31 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
         style={{ position: "absolute", top: 0, left: 0, width, height, objectFit: "cover" }}
       />
 
-      {/* gradasi gelap agar teks tetap terbaca di atas foto apa pun — mulai
-          menggelap lebih awal (sekitar area headline) dan lebih pekat di
-          bawah, supaya kontras tidak bergantung pada isi foto */}
+      {/* gradasi gelap tipis di seluruh bagian bawah foto — dasar kontras
+          global, halus, tidak dominan */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           display: "flex",
           background:
-            "linear-gradient(to bottom, rgba(10,8,5,0.10) 0%, rgba(10,8,5,0) 22%, rgba(10,8,5,0.30) 40%, rgba(10,8,5,0.58) 56%, rgba(10,8,5,0.80) 74%, rgba(10,8,5,0.92) 100%)",
+            "linear-gradient(to bottom, rgba(10,8,5,0.05) 0%, rgba(10,8,5,0) 30%, rgba(10,8,5,0.10) 50%, rgba(10,8,5,0.28) 68%, rgba(10,8,5,0.48) 84%, rgba(10,8,5,0.60) 100%)",
+        }}
+      />
+
+      {/* vignette lembut menyatu ke foto (bukan kotak/panel keras) — pusatnya
+          di kiri-bawah, tempat teks headline duduk, memudar melebar ke kanan
+          & atas. Ini pengganti panel rgba solid+rounded sebelumnya, supaya
+          kesan "sticker nempel di atas foto" hilang tapi kontras teks tetap
+          terjaga di foto seramai/seterang apapun — kombinasi dgn textShadow
+          berlapis di tiap elemen teks di bawah. */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          background:
+            "radial-gradient(120% 90% at 8% 100%, rgba(6,5,3,0.72) 0%, rgba(6,5,3,0.55) 28%, rgba(6,5,3,0.32) 48%, rgba(6,5,3,0.12) 68%, rgba(6,5,3,0) 85%)",
         }}
       />
 
@@ -129,9 +144,12 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
         <img src={logoDataUri} alt="" width={130} height={183} style={{ display: "flex" }} />
       </div>
 
-      {/* headline block — dibungkus panel semi-transparan (bukan cuma
-          gradasi global) supaya tetap kebaca walau area foto di baliknya
-          terang/ramai */}
+      {/* headline block — TANPA panel/card di belakangnya (dilepas sesuai
+          arahan admin, kesan "kotak" bikin kurang premium). Kontras teks
+          sekarang murni dari kombinasi vignette radial di atas + textShadow
+          berlapis (tight dark outline + soft glow) di tiap elemen teks —
+          teknik yang sama dipakai template Instagram premium lain supaya
+          teks "melayang" alami di atas foto, bukan ditempel kotak. */}
       <div
         style={{
           position: "absolute",
@@ -142,17 +160,6 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
           flexDirection: "column",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignSelf: "flex-start",
-            maxWidth: "100%",
-            background: "rgba(8,6,4,0.46)",
-            borderRadius: 18,
-            padding: "26px 30px",
-          }}
-        >
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {headline.map((line, i) => (
             <span
@@ -165,7 +172,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
                 lineHeight: line.script ? 1 : 1.1,
                 color: line.script ? "#C7AF6F" : "#FFFFFF",
                 textShadow:
-                  "0 1px 2px rgba(0,0,0,0.55), 0 8px 28px rgba(0,0,0,0.5)",
+                  "0 1px 3px rgba(0,0,0,0.9), 0 2px 12px rgba(0,0,0,0.75), 0 10px 32px rgba(0,0,0,0.55)",
               }}
             >
               {line.text}
@@ -183,6 +190,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
               letterSpacing: 2,
               color: "#C7AF6F",
               marginTop: 16,
+              textShadow: "0 1px 3px rgba(0,0,0,0.85), 0 4px 16px rgba(0,0,0,0.6)",
             }}
           >
             {input.subtitle}
@@ -196,8 +204,9 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
               fontFamily: "Poppins",
               fontWeight: 400,
               fontSize: 19,
-              color: "rgba(255,255,255,0.78)",
+              color: "rgba(255,255,255,0.85)",
               marginTop: 10,
+              textShadow: "0 1px 3px rgba(0,0,0,0.85), 0 4px 16px rgba(0,0,0,0.6)",
             }}
           >
             {`Product Code: ${input.productCode}`}
@@ -213,7 +222,8 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
                 fontWeight: 600,
                 fontSize: 14,
                 letterSpacing: 3,
-                color: "rgba(199,175,111,0.85)",
+                color: "rgba(199,175,111,0.9)",
+                textShadow: "0 1px 3px rgba(0,0,0,0.85), 0 4px 16px rgba(0,0,0,0.6)",
               }}
             >
               COLOUR AVAILABLE
@@ -235,7 +245,6 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
             </div>
           </div>
         ) : null}
-        </div>
       </div>
 
       {/* caption bar bawah (opsional) */}
@@ -259,6 +268,7 @@ export async function renderPosterImageResponse(input: RenderPosterInput) {
               fontSize: 19,
               lineHeight: 1.45,
               color: "rgba(255,255,255,0.92)",
+              textShadow: "0 1px 3px rgba(0,0,0,0.85), 0 4px 16px rgba(0,0,0,0.6)",
             }}
           >
             {input.bottomCaption}

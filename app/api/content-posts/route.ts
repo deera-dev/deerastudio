@@ -12,7 +12,7 @@ const requestSchema = z.object({
   productKode: z.string(),
   imageUrls: z.array(z.string().url()).min(1).max(10),
   contentType: z.enum(["feed_single", "carousel", "reel"]),
-  theme: z.enum(["produk_highlight", "tips_styling", "brand_story", "promo"]),
+  theme: z.enum(["produk_highlight", "tips_styling", "brand_story", "promo", "brand_awareness"]),
   caption: z.string().min(1),
   hashtags: z.array(z.string()).default([]),
   extraNotes: z.string().optional(),

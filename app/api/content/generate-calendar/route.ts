@@ -30,11 +30,11 @@ const WEEKDAY_PATTERN: Record<number, number[]> = {
 };
 
 const THEME_ROTATION: ContentTheme[] = [
-  "produk_highlight",
+  "brand_awareness",
   "tips_styling",
   "produk_highlight",
   "brand_story",
-  "produk_highlight",
+  "brand_awareness",
   "promo",
 ];
 

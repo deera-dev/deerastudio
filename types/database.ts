@@ -119,7 +119,7 @@ export interface Generation {
 // Lihat lib/prompts/content-generate.ts utk logic generate teksnya &
 // lib/instagram/client.ts utk publish-nya.
 export type ContentPostType = "feed_single" | "carousel" | "reel";
-export type ContentPostTheme = "produk_highlight" | "tips_styling" | "brand_story" | "promo";
+export type ContentPostTheme = "produk_highlight" | "tips_styling" | "brand_story" | "promo" | "brand_awareness";
 export type ContentPostStatus = "draft" | "scheduled" | "published" | "failed";
 
 export interface ContentPost {

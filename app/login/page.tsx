@@ -8,18 +8,31 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, FieldError } from "@/components/ui/Field";
 
+const EMAIL_DOMAIN = "deera.id";
+
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  // Semua akun yang bisa login WAJIB @deera.id — jadi field ini cuma nampung
+  // bagian sebelum "@", domainnya otomatis ditempel pas submit (lihat
+  // handleSubmit). Kalau admin paste email lengkap (ada "@"), bagian
+  // domain-nya otomatis dibuang lagi lewat handleUsernameChange supaya tidak
+  // dobel jadi "denny@deera.id@deera.id".
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handleUsernameChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    setUsername(raw.includes("@") ? raw.split("@")[0] : raw);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     const supabase = createClient();
+    const email = `${username.trim()}@${EMAIL_DOMAIN}`;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
@@ -53,15 +66,22 @@ export default function LoginPage() {
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <Label htmlFor="email">Username</Label>
+            <div className="flex items-stretch">
+              <Input
+                id="email"
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={handleUsernameChange}
+                placeholder="denny"
+                className="rounded-r-none border-r-0"
+                required
+              />
+              <span className="flex items-center whitespace-nowrap rounded-r-md border border-l-0 border-border-strong bg-surface-2 px-3 text-sm text-text-faint">
+                @{EMAIL_DOMAIN}
+              </span>
+            </div>
           </div>
           <div>
             <Label htmlFor="password">Password</Label>

@@ -11,7 +11,7 @@ import { suggestStoryboard, type ContentTheme } from "@/lib/prompts/content-gene
 
 const requestSchema = z.object({
   productKode: z.string(),
-  theme: z.enum(["produk_highlight", "tips_styling", "brand_story", "promo"]),
+  theme: z.enum(["produk_highlight", "tips_styling", "brand_story", "promo", "brand_awareness"]),
   extraNotes: z.string().optional(),
   sceneCount: z.number().int().min(2).max(10),
 });

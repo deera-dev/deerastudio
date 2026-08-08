@@ -5,7 +5,15 @@ import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-export function LogoutButton({ className }: { className?: string }) {
+export function LogoutButton({
+  className,
+  iconOnly,
+}: {
+  className?: string;
+  // Dipakai di rail ikon desktop (AppShell) — cuma ikon, bulat, tanpa teks,
+  // konsisten dgn tombol nav lain di rail.
+  iconOnly?: boolean;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -15,6 +23,22 @@ export function LogoutButton({ className }: { className?: string }) {
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
+  }
+
+  if (iconOnly) {
+    return (
+      <button
+        onClick={handleLogout}
+        disabled={loading}
+        title="Keluar"
+        className={cn(
+          "flex h-11 w-11 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-50",
+          className
+        )}
+      >
+        <LogOut className="h-[18px] w-[18px]" />
+      </button>
+    );
   }
 
   return (

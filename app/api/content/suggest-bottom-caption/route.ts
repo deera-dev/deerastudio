@@ -1,17 +1,17 @@
-// POST /api/content/suggest-headline — Content Studio, panel "Poster AI".
-// Sarankan headline/subtitle/bottomCaption (copywriting mood, lihat
-// lib/prompts/content-generate.ts) berdasarkan fakta produk asli. Kode
-// produk & warna tersedia TIDAK diminta dari AI — diisi langsung dari
-// tabel products di sini supaya selalu akurat (bukan hasil generate LLM).
+// POST /api/content/suggest-bottom-caption — Content Studio, panel "Poster
+// AI". Regenerate KHUSUS kalimat bottomCaption (bar teks bawah poster),
+// tanpa merombak headline/subtitle yang sudah di-review admin. Beda dari
+// /suggest-headline yang generate SEMUA sekaligus.
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { suggestHeadline, type ContentTheme } from "@/lib/prompts/content-generate";
+import { suggestBottomCaption, type ContentTheme } from "@/lib/prompts/content-generate";
 
 const requestSchema = z.object({
   productKode: z.string(),
   theme: z.enum(["produk_highlight", "tips_styling", "brand_story", "promo", "brand_awareness"]),
   extraNotes: z.string().optional(),
+  headlineText: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await suggestHeadline({
+    const bottomCaption = await suggestBottomCaption({
       product: {
         kode: product.kode,
         nama: product.nama,
@@ -41,16 +41,13 @@ export async function POST(req: NextRequest) {
       },
       theme: body.data.theme as ContentTheme,
       extraNotes: body.data.extraNotes,
+      headlineText: body.data.headlineText,
     });
 
-    return NextResponse.json({
-      ...result,
-      productCode: product.kode,
-      colors: ((product.warna as string[] | null) ?? []).slice(0, 6),
-    });
+    return NextResponse.json({ bottomCaption });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Saran headline gagal" },
+      { error: err instanceof Error ? err.message : "Generate caption bar gagal" },
       { status: 500 }
     );
   }

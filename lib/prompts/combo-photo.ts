@@ -1,22 +1,22 @@
-// "Foto Gabungan Produk AI" (Agustus 2026) — bagian dari Content Studio,
-// beda dari marketing-photo.ts (restyle 1 foto/1 model) — ini MENGGABUNGKAN
-// 2 foto produk yang SUDAH ADA (masing-masing 1 model + 1 garment) jadi SATU
-// frame baru, seolah 2 model itu difoto bersama di momen/scene yang sama.
-// Dipakai kalau admin mau highlight 2 produk sekaligus dalam 1 foto (mis.
-// "mix and match" / dua sahabat / dua looks bersisian) — brand-awareness
-// lebih tinggi drpd 2 foto terpisah karena kerasa "editorial", bukan katalog.
+// "Foto Gabungan Produk AI" (Agustus 2026, digeneralisasi ke N produk) —
+// bagian dari Content Studio, beda dari marketing-photo.ts (restyle 1
+// foto/1 model) — ini MENGGABUNGKAN 2-5 foto produk yang SUDAH ADA
+// (masing-masing 1 model + 1 garment) jadi SATU frame baru, seolah semua
+// model itu difoto bersama di momen/scene yang sama. Dipakai kalau admin
+// pilih beberapa produk sekaligus ("mode grup", lihat
+// app/content/_hooks/useGroupCombo.ts) — brand-awareness lebih tinggi drpd
+// foto terpisah per produk karena kerasa "editorial", bukan katalog.
 //
-// CATATAN JUJUR (penting utk ekspektasi admin): compositing 2 wajah + 2
+// CATATAN JUJUR (penting utk ekspektasi admin): compositing beberapa wajah +
 // garment berbeda dalam 1 frame baru jauh LEBIH SULIT & LEBIH BERISIKO buat
-// model gambar dibanding restyle 1 foto (marketing-photo.ts) — kemungkinan
-// hasil kurang sempurna (wajah/detail baju sedikit meleset) lebih tinggi.
+// model gambar dibanding restyle 1 foto (marketing-photo.ts) — makin banyak
+// orang (3-5), makin tinggi kemungkinan wajah/detail baju sedikit meleset.
 // Rekomendasikan admin review ketat before-pakai, generate ulang kalau perlu.
 import { fal, FAL_MODELS } from "../fal/client";
 
 export interface GenerateComboPhotoInput {
-  sourceImageUrlA: string; // foto produk 1 (model A + garment A), sudah ada
-  sourceImageUrlB: string; // foto produk 2 (model B + garment B), sudah ada
-  sceneDescription: string; // deskripsi scene/momen baru tempat keduanya "difoto bersama"
+  sourceImageUrls: string[]; // 2-5 foto produk (masing-masing 1 model + garment), sudah ada
+  sceneDescription: string; // deskripsi scene/momen baru tempat semua "difoto bersama"
 }
 
 export interface GenerateComboPhotoResult {
@@ -24,27 +24,38 @@ export interface GenerateComboPhotoResult {
   generationTimeMs: number;
 }
 
-const DUAL_IDENTITY_AND_GARMENT_LOCK = [
-  "You are an expert editorial fashion photo director. You are given TWO separate source photographs, each showing ONE real woman wearing ONE real garment (Photo A and Photo B are two different women, two different garments, currently photographed separately in plain/studio settings).",
-  "TASK: compose a SINGLE new photorealistic photograph that shows BOTH women together in the SAME new scene/moment described below, as if they had been photographed together at the same time and place — like two friends or two models appearing side by side in one premium editorial fashion photograph.",
-  "MUST STAY IDENTICAL for the woman from Photo A (non-negotiable): her face and facial identity (face shape, eyes, eyebrows, nose, lips, jawline, skin tone, skin texture), her hijab/headscarf color and general style, and the exact garment from Photo A — color, fabric, texture, lace, embroidery, motifs, patterns, trims, stitching, silhouette, proportions — reproduced exactly, not redesigned or simplified.",
-  "MUST STAY IDENTICAL for the woman from Photo B (non-negotiable, same rules): her face and facial identity, her hijab/headscarf color and style, and the exact garment from Photo B reproduced exactly.",
-  "Do not blend, mix, or swap any facial features or garment details between the two women — each keeps HER OWN face and HER OWN garment exactly as shown in her respective source photo.",
-  "MAY CHANGE to fit the composed scene (encouraged): both women's pose, body language, gesture, gaze direction, their positions/framing relative to each other, and how they interact (standing together, walking side by side, sitting and chatting, etc.) — a natural, candid-feeling composition is preferred over two stiff catalog poses simply pasted next to each other.",
-  "The lighting, color grade, shadows, and perspective on both women must be consistent with each other and with the new scene, as if genuinely photographed together in one shot.",
-].join(" ");
+const ORDINALS = ["first", "second", "third", "fourth", "fifth"];
 
-function buildPrompt(sceneDescription: string): string {
+function buildIdentityLockRules(count: number): string {
+  const lines = [
+    `You are an expert editorial fashion photo director. You are given ${count} separate source photographs, each showing ONE real woman wearing ONE real garment (Photo ${ORDINALS.slice(0, count).join(", ")} are ${count} different women with ${count} different garments, currently photographed separately in plain/studio settings).`,
+    `TASK: compose a SINGLE new photorealistic photograph that shows ALL ${count} women together in the SAME new scene/moment described below, as if they had all been photographed together at the same time and place — like a group of friends or models appearing together in one premium editorial fashion photograph.`,
+  ];
+  for (let i = 0; i < count; i++) {
+    lines.push(
+      `MUST STAY IDENTICAL for the woman from Photo ${ORDINALS[i]} (non-negotiable): her face and facial identity (face shape, eyes, eyebrows, nose, lips, jawline, skin tone, skin texture), her hijab/headscarf color and general style, and the exact garment from Photo ${ORDINALS[i]} — color, fabric, texture, lace, embroidery, motifs, patterns, trims, stitching, silhouette, proportions — reproduced exactly, not redesigned or simplified.`
+    );
+  }
+  lines.push(
+    "Do not blend, mix, or swap any facial features or garment details between the women — each keeps HER OWN face and HER OWN garment exactly as shown in her respective source photo.",
+    "MAY CHANGE to fit the composed scene (encouraged): every woman's pose, body language, gesture, gaze direction, their positions/framing relative to each other, and how they interact (standing together, walking side by side, sitting and chatting, arranged in a natural group composition, etc.) — a natural, candid-feeling composition is preferred over stiff catalog poses simply pasted next to each other.",
+    "The lighting, color grade, shadows, and perspective on every woman must be consistent with each other and with the new scene, as if genuinely photographed together in one shot.",
+    `If ${count} people is a lot to fit naturally in one frame, prefer a believable, well-composed group arrangement (mis. slightly staggered depth, natural clustering) over cramming everyone stiffly in a single flat row.`
+  );
+  return lines.join(" ");
+}
+
+function buildPrompt(count: number, sceneDescription: string): string {
   return [
-    DUAL_IDENTITY_AND_GARMENT_LOCK,
+    buildIdentityLockRules(count),
     "",
     `SCENE & STORY: ${sceneDescription}.`,
     "",
-    "Bring this scene to life as a genuine editorial moment featuring both women together — natural implied activity, ambient life, or context where the scene description calls for it, rather than an empty, static studio backdrop. Photorealistic, high-end editorial fashion photography, premium modest-fashion brand aesthetic. No text, no watermark, no logo anywhere in the image.",
+    "Bring this scene to life as a genuine editorial moment featuring everyone together — natural implied activity, ambient life, or context where the scene description calls for it, rather than an empty, static studio backdrop. Photorealistic, high-end editorial fashion photography, premium modest-fashion brand aesthetic. No text, no watermark, no logo anywhere in the image.",
     "",
-    "Before finalizing, verify internally: are these still unmistakably the same two women from Photo A and Photo B? Does each garment still match its own source photo exactly in color, pattern, embroidery, and silhouette? Does it look like one real photograph of two people together, not two images crudely merged? If any face or garment detail drifted, fix it — identity and garment fidelity for BOTH women always wins over composition creativity.",
+    `Before finalizing, verify internally: are these still unmistakably the same ${count} women from the ${count} source photos? Does each garment still match its own source photo exactly in color, pattern, embroidery, and silhouette? Does it look like one real photograph of everyone together, not images crudely merged? If any face or garment detail drifted, fix it — identity and garment fidelity for EVERYONE always wins over composition creativity.`,
     "",
-    "Produce ONE final photorealistic image containing both women together in the same frame.",
+    `Produce ONE final photorealistic image containing all ${count} women together in the same frame.`,
   ].join("\n");
 }
 
@@ -52,11 +63,12 @@ export async function generateComboPhoto(
   input: GenerateComboPhotoInput
 ): Promise<GenerateComboPhotoResult> {
   const startedAt = Date.now();
+  const count = input.sourceImageUrls.length;
 
   const result = await fal.subscribe(FAL_MODELS.NANO_BANANA, {
     input: {
-      prompt: buildPrompt(input.sceneDescription),
-      image_urls: [input.sourceImageUrlA, input.sourceImageUrlB],
+      prompt: buildPrompt(count, input.sceneDescription),
+      image_urls: input.sourceImageUrls,
       aspect_ratio: "4:5",
       resolution: "1K",
       output_format: "jpeg",

@@ -686,7 +686,7 @@ export default function GeneratePage() {
                     name="backgroundMode"
                     checked={backgroundMode === mode.value}
                     onChange={() => setBackgroundMode(mode.value)}
-                    className="h-4 w-4 accent-[#697e3e]"
+                    className="h-4 w-4 accent-gold"
                   />
                   <span>
                     {mode.label}

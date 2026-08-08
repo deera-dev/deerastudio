@@ -3,6 +3,12 @@
 // asli dari tabel products + tema yang dipilih admin. Dipanggil berulang
 // kali dari halaman /content tiap admin klik "Generate Ulang" sebelum
 // akhirnya disimpan sbg draft lewat POST /api/content-posts.
+//
+// Mendukung "mode grup" (2-5 produk sekaligus, lihat
+// app/content/_hooks/useProductSelection.ts): kalau additionalProductKodes
+// diisi, generateCaption() TIDAK menguraikan spesifikasi produk mana pun
+// (lihat lib/prompts/content-generate.ts) — cukup fetch kode+nama produk
+// tambahan, tanpa bahan/warna/harga.
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -10,9 +16,10 @@ import { generateCaption, type ContentTheme, type ContentType } from "@/lib/prom
 
 const requestSchema = z.object({
   productKode: z.string(),
-  theme: z.enum(["produk_highlight", "tips_styling", "brand_story", "promo"]),
+  theme: z.enum(["produk_highlight", "tips_styling", "brand_story", "promo", "brand_awareness"]),
   contentType: z.enum(["feed_single", "carousel", "reel"]),
   extraNotes: z.string().optional(),
+  additionalProductKodes: z.array(z.string()).max(4).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -32,6 +39,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Produk tidak ditemukan" }, { status: 404 });
   }
 
+  let additionalProducts: { kode: string; nama: string }[] | undefined;
+  if (body.data.additionalProductKodes?.length) {
+    const { data: extras } = await supabase
+      .from("products")
+      .select("kode, nama")
+      .in("kode", body.data.additionalProductKodes);
+    additionalProducts = extras ?? [];
+  }
+
   const variants = (product.variants as { size: string; harga: number }[] | null) ?? [];
   const hargaList = variants.map((v) => v.harga).filter((h): h is number => typeof h === "number");
 
@@ -49,6 +65,7 @@ export async function POST(req: NextRequest) {
       theme: body.data.theme as ContentTheme,
       contentType: body.data.contentType as ContentType,
       extraNotes: body.data.extraNotes,
+      additionalProducts,
     });
     return NextResponse.json(result);
   } catch (err) {

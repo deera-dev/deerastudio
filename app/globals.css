@@ -1,37 +1,37 @@
 @import "tailwindcss";
 
-/* AI Fashion Studio — tema editorial terang bernuansa olive & gold pucat,
-   sesuai warna brand yang diminta: krim FFFAF0 (background), olive 697E3E
-   (aksen utama/tombol), gold pucat F6DD8B (aksen sekunder/highlight).
-   Nama variabel CSS dipertahankan (ink/gold/dst) dari tema gelap sebelumnya
-   supaya semua komponen yang sudah pakai class bg-ink/text-gold/dst tidak
-   perlu diubah satu-satu — cukup ganti NILAI-nya di sini. */
+/* Deera Studio — dark glassmorphism, terinspirasi dashboard admin modern
+   (kartu kaca blur di atas background gelap bertekstur, aksen oranye
+   hangat, sidebar jadi rail ikon mengambang tanpa logo). Nama variabel CSS
+   dipertahankan (ink/gold/dst) dari tema-tema sebelumnya supaya semua
+   komponen yang sudah pakai class bg-ink/text-gold/dst tidak perlu diubah
+   satu-satu — cukup ganti NILAI-nya di sini. */
 :root {
-  --color-ink: #fffaf0; /* krim — background halaman */
-  --color-ink-2: #fffdf6; /* krim lebih terang — sidebar/topbar */
-  --color-surface: #ffffff; /* putih — kartu */
-  --color-surface-2: #f6f1e0; /* krim gelap dikit — input/field */
-  --color-border: #ece2c6;
-  --color-border-strong: #d9c98f;
+  --color-ink: #100e0c; /* nyaris hitam, hangat — background halaman */
+  --color-ink-2: #17140f; /* dasar solid sidebar/topbar (sebelum opacity+blur) */
+  --color-surface: #1d1915; /* dasar solid kartu (sebelum opacity+blur, lihat Card.tsx) */
+  --color-surface-2: #262019; /* dasar solid input/field */
+  --color-border: #35302a;
+  --color-border-strong: #4a4239;
 
-  --color-gold: #697e3e; /* olive — aksen utama (tombol, nav aktif, link) */
-  --color-gold-soft: #8aa056; /* olive lebih terang — hover */
-  --color-gold-dark: #52632f; /* olive lebih gelap — pressed/teks di atas gold */
+  --color-gold: #ff6b35; /* oranye — aksen utama (tombol, nav aktif, link) */
+  --color-gold-soft: #ff8f63; /* oranye lebih terang — hover */
+  --color-gold-dark: #ffa36b; /* oranye cerah — teks/border aksen di atas gelap */
 
-  --color-text: #2e3620; /* charcoal-olive — teks utama, kontras tinggi di krim */
-  --color-text-muted: #6c6a4e;
-  --color-text-faint: #9a9678;
+  --color-text: #f5f1ea; /* nyaris putih hangat — teks utama */
+  --color-text-muted: #b9b2a6;
+  --color-text-faint: #7c7568;
 
-  --color-success: #3f7a4e;
-  --color-success-soft: #3f7a4e1a;
-  --color-danger: #b3503b;
-  --color-danger-soft: #b3503b1a;
+  --color-success: #4ade80;
+  --color-success-soft: #4ade8022;
+  --color-danger: #ff6b6b;
+  --color-danger-soft: #ff6b6b22;
 
   --color-background: var(--color-ink);
   --color-foreground: var(--color-text);
 
-  /* aksen gold pucat (F6DD8B) dipakai khusus untuk glow dekoratif & badge highlight */
-  --color-champagne: #f6dd8b;
+  /* aksen hangat dipakai khusus glow dekoratif di background halaman */
+  --color-champagne: #ffb088;
 }
 
 @theme inline {
@@ -68,25 +68,26 @@
 }
 
 html {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
   background: var(--color-background);
   background-image:
-    radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(246, 221, 139, 0.35), transparent),
-    radial-gradient(ellipse 800px 500px at 100% 0%, rgba(105, 126, 62, 0.08), transparent);
+    radial-gradient(ellipse 1400px 700px at 50% -15%, rgba(255, 107, 53, 0.18), transparent),
+    radial-gradient(ellipse 900px 600px at 100% 5%, rgba(255, 143, 99, 0.1), transparent),
+    radial-gradient(ellipse 700px 500px at 0% 100%, rgba(255, 107, 53, 0.06), transparent);
   background-attachment: fixed;
   color: var(--color-foreground);
   font-family: var(--font-sans);
 }
 
 ::selection {
-  background: rgba(246, 221, 139, 0.55);
+  background: rgba(255, 107, 53, 0.4);
   color: var(--color-text);
 }
 
-/* Scrollbar — tipis, olive redup */
+/* Scrollbar — tipis, oranye redup */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -103,7 +104,12 @@ body {
   background: var(--color-gold-dark);
 }
 
-/* Autofill browser jangan matahin tema terang */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-gold);
+}
+
+/* Autofill browser jangan matahin tema gelap */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
