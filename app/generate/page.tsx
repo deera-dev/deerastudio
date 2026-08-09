@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label, Select, FieldHint } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
+import { showImageLightbox } from "@/components/ui/ImageLightbox";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type {
@@ -49,6 +50,14 @@ import type {
 // pose (langkah 1), backend otomatis generate foto ke-2 dari sisi belakang
 // model (lihat isBackView di lib/prompts/nano-banana-generate.ts &
 // app/api/generate-set/route.ts).
+//
+// REVISI #11 (Agustus 2026 — admin: "ga sesuai yang saya mau deh, balik ke
+// 2 foto aja, depan dan belakang, dah cukup"): admin menolak arah "4 foto
+// tetap" (REVISI #7-#10, sempat nambah Kolase Gabungan & Kolase Detail).
+// Set foto sekarang KEMBALI ke cuma 2 deliverable tetap: Utama (depan) &
+// Angle (belakang, otomatis — logic REVISI #9 tetap dipakai). Kolase +
+// crop close-up tersembunyi DIHAPUS total dari alur & UI ringkasan di
+// bawah — lihat app/api/generate-set/route.ts REVISI #11.
 
 type ProductRow = {
   kode: string;
@@ -102,22 +111,24 @@ const STEPS = [
 // nano-banana-generate.ts & app/api/generate-set/route.ts.
 const COST_UTAMA = 2700; // 1x Nano Banana Pro (sudah termasuk background)
 const COST_ANGLE = 2700; // foto belakang (isBackView) -> panggilan independen lagi, sama mahal spt utama
-const COST_DERIVED = 640; // 1x crop Kontext tersembunyi (bahan Kolase Detail)
 // REVISI FINAL: "seri" sekarang generate PENUH pakai foto asli warna itu
 // (bukan recolor tebakan AI) -> sama mahalnya dengan angle, BUKAN lagi 640.
 const COST_SERI = COST_ANGLE;
-// REVISI #7 — "4 foto tetap": tiap set SELALU 1 utama + 1 angle (wajib) + 2
-// crop close-up tersembunyi (bahan Kolase Detail, tidak disimpan sbg baris
-// sendiri) + 2 kolase (compositing lokal, cost 0). Seri warna tetap fitur
-// terpisah/opsional di luar 4 foto tetap ini.
-const FIXED_SET_COST = COST_UTAMA + COST_ANGLE + COST_DERIVED * 2;
+// REVISI #11 — "2 foto tetap": tiap set SELALU 1 utama + 1 angle (wajib),
+// tidak lebih. Seri warna tetap fitur terpisah/opsional di luar ini. Kolase
+// Gabungan/Kolase Detail (sempat ada REVISI #7-#10) DIHAPUS total.
+const FIXED_SET_COST = COST_UTAMA + COST_ANGLE;
 
+// Label untuk role lama ("kolase_gabungan"/"kolase_detail"/"detail") tetap
+// dipertahankan di sini WALAU tidak digenerate lagi — riwayat set LAMA yang
+// sudah kadung punya baris itu tetap perlu ditampilkan dgn label rapi kalau
+// admin buka lagi hasilnya di halaman ini (jarang, tapi mungkin).
 const ROLE_LABELS: Record<string, string> = {
   utama: "Utama",
   angle: "Angle (Belakang)",
   seri: "Seri Warna",
-  kolase_gabungan: "Kolase Gabungan",
-  kolase_detail: "Kolase Detail",
+  kolase_gabungan: "Kolase Gabungan (lama)",
+  kolase_detail: "Kolase Detail (lama)",
   detail: "Detail (lama)",
 };
 
@@ -238,15 +249,19 @@ export default function GeneratePage() {
     );
   }
 
-  const step1Done = !!selectedModelId && !!selectedPoseId;
+  // REVISI #9 — foto Angle butuh pose bertanda "Pose Belakang" (di halaman
+  // Poses) utk model yang dipilih; generate-set akan gagal jelas kalau
+  // belum ada, jadi dicek & diperingatkan di sini SEBELUM submit juga.
+  const hasBackPose = poses.some((p) => p.is_back_view);
+  const step1Done = !!selectedModelId && !!selectedPoseId && hasBackPose;
   const step2Done = !!selectedProduct;
   const step3Done = !!productImages.front;
   const canSubmit = step1Done && step2Done && step3Done && !submitting;
 
   const validSeriEntries = seriEntries.filter((e) => e.image);
-  // REVISI #7 — total foto SELALU 4 (utama, angle, kolase gabungan, kolase
-  // detail) + seri warna opsional (fitur terpisah, lihat catatan atas file).
-  const totalPhotos = 4 + validSeriEntries.length;
+  // REVISI #11 — total foto SELALU 2 (utama, angle) + seri warna opsional
+  // (fitur terpisah, lihat catatan atas file).
+  const totalPhotos = 2 + validSeriEntries.length;
   const estimatedCost = FIXED_SET_COST + validSeriEntries.length * COST_SERI;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -306,7 +321,7 @@ export default function GeneratePage() {
       <PageHeader
         eyebrow="Studio"
         title="Generate Set Foto"
-        description="Hasil Virtual Try-On dengan background & aksesoris sesuai gaya Deera. Jumlah foto per set bisa diatur di bawah."
+        description="Hasil Virtual Try-On dengan background & aksesoris sesuai gaya Deera. Tiap set selalu 2 foto tetap (Utama & Angle Belakang)."
       />
 
       {/* Stepper */}
@@ -402,14 +417,27 @@ export default function GeneratePage() {
                   )}
                 </div>
 
-                {/* REVISI #8 — tidak ada lagi picker pose kedua. Foto Angle
-                    otomatis dibuat dari sisi belakang model, pakai pose yang
-                    sama dipilih di atas (lihat catatan REVISI #8 di atas
-                    file). */}
-                <div className="rounded-md border border-border-strong bg-surface-2 px-3.5 py-2.5 text-xs text-text-muted">
-                  Foto ke-2 (Angle) otomatis dibuat dari sisi <span className="font-medium text-text">belakang</span> model
-                  memakai pose yang sama di atas — tidak perlu pilih pose lagi.
-                </div>
+                {/* REVISI #9 — tidak ada picker pose kedua di sini. Foto
+                    Angle otomatis pakai pose yang ditandai "Pose Belakang"
+                    utk model ini (diatur SEKALI di halaman Poses, lihat
+                    catatan REVISI #9 di app/api/generate-set/route.ts). Kalau
+                    belum ada, tampilkan peringatan & blok submit drpd
+                    generate-set gagal dgn foto yang salah arah lagi. */}
+                {hasBackPose ? (
+                  <div className="rounded-md border border-border-strong bg-surface-2 px-3.5 py-2.5 text-xs text-text-muted">
+                    Foto ke-2 (Angle) otomatis dibuat dari sisi <span className="font-medium text-text">belakang</span> model
+                    memakai pose yang ditandai &quot;Pose Belakang&quot; utk model ini — tidak perlu pilih pose lagi.
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-danger/40 bg-danger-soft px-3.5 py-2.5 text-xs text-danger">
+                    Model ini belum punya pose yang ditandai &quot;Pose Belakang&quot; — generate tidak
+                    bisa dilanjutkan. Tandai satu pose dulu di halaman{" "}
+                    <a href="/poses" className="font-medium underline">
+                      Poses
+                    </a>{" "}
+                    (dipakai otomatis utk foto Angle).
+                  </div>
+                )}
               </>
             )}
           </CardBody>
@@ -756,29 +784,21 @@ export default function GeneratePage() {
           </CardHeader>
           <CardBody>
             <p className="mb-3 text-sm text-text-muted">
-              Tiap generate SELALU menghasilkan 4 foto tetap — tidak bisa diatur/dikurangi:
+              Tiap generate SELALU menghasilkan 2 foto tetap — tidak bisa diatur/dikurangi:
             </p>
             <ul className="mb-4 flex flex-col gap-1.5 text-sm text-text-muted">
               <li>
-                <span className="font-medium text-text">1. Utama</span> — badan penuh, pose utama.
+                <span className="font-medium text-text">1. Utama</span> — badan penuh, pose depan.
               </li>
               <li>
                 <span className="font-medium text-text">2. Angle (Belakang)</span> — badan penuh,
                 otomatis dari sisi belakang model, pose sama dgn Utama.
               </li>
-              <li>
-                <span className="font-medium text-text">3. Kolase Gabungan</span> — potret + badan
-                penuh berdampingan, logo brand (disusun otomatis, gratis).
-              </li>
-              <li>
-                <span className="font-medium text-text">4. Kolase Detail</span> — foto utama +
-                2 close-up berlabel DETAIL, logo brand (disusun otomatis, gratis).
-              </li>
             </ul>
             <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface-2 px-4 py-3">
               <Badge tone="gold">{totalPhotos} foto total</Badge>
               <span className="text-sm text-text-muted">
-                4 foto tetap
+                2 foto tetap
                 {validSeriEntries.length > 0 && ` + ${validSeriEntries.length} seri warna`} ·
                 Estimasi biaya:{" "}
                 <span className="font-medium text-text">
@@ -833,12 +853,24 @@ export default function GeneratePage() {
                       className="overflow-hidden rounded-lg border border-border bg-surface-2 text-center"
                     >
                       {gen.output_image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={gen.output_image_url}
-                          alt={gen.image_role}
-                          className="aspect-[3/4] w-full object-cover"
-                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            showImageLightbox(
+                              gen.output_image_url as string,
+                              ROLE_LABELS[gen.image_role] ?? gen.image_role
+                            )
+                          }
+                          className="block w-full"
+                          title="Lihat full screen"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={gen.output_image_url}
+                            alt={gen.image_role}
+                            className="aspect-[3/4] w-full object-cover"
+                          />
+                        </button>
                       ) : (
                         <div className="flex aspect-[3/4] w-full items-center justify-center text-xs text-text-faint">
                           {gen.status === "failed" ? "Gagal" : "..."}

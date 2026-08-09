@@ -207,6 +207,26 @@ export async function reconcileVideoJob(
 
   const allCompleted = clipJobs.every((j) => j.status === "completed");
   if (allCompleted) {
+    // BUG FIX (Agustus 2026, setelah admin lapor "Gagal: Unprocessable
+    // Entity" pas generate video 1-foto — default History sekarang cuma
+    // Utama saja, lihat REVISI di app/history/page.tsx): fal-ai/ffmpeg-api/
+    // merge-videos menolak (422) kalau `video_urls` cuma berisi 1 URL —
+    // endpoint itu didesain buat MENGGABUNG >=2 video, bukan no-op utk 1.
+    // Kode lama SELALU panggil submitMergeJob apa pun jumlah klipnya,
+    // termasuk pas cuma 1 (yang sekarang jadi kasus PALING SERING dipakai
+    // sejak default video diubah ke 1-foto). Sekarang: kalau cuma 1 klip,
+    // skip merge sama sekali — klip Kling itu SENDIRI sudah jadi video
+    // final, tidak perlu digabung dgn apa-apa.
+    if (clipJobs.length === 1) {
+      return {
+        videoStatus: "completed",
+        videoUrl: clipJobs[0].clipUrl,
+        errorMessage: null,
+        clipJobs,
+        mergeRequestId: null,
+        stage: null,
+      };
+    }
     try {
       const clipUrls = clipJobs.map((j) => j.clipUrl as string);
       const { requestId } = await submitMergeJob(clipUrls);

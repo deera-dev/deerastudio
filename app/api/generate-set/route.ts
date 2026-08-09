@@ -84,25 +84,67 @@
 // REVISI #8 (Agustus 2026, segera setelah #7 — admin: "ini kita ambil angle
 // belakang aja ya jadinya" / "jadi ga pilih pose lagi"): #7 sempat bikin
 // "angle" WAJIB pilih pose kedua dari galeri ai_poses (mirip cara "utama"
-// pilih pose) — ternyata itu bukan yang dimaksud admin. "Angle" sekarang
-// disederhanakan jadi otomatis BELAKANG, tanpa perlu pilih pose sama
-// sekali: pakai poseImageUrl yang SAMA dengan foto utama (input.poseId),
-// tapi dipanggil dengan flag isBackView=true (lihat lib/prompts/
-// nano-banana-generate.ts) supaya AI merender ulang scene yang SAMA dari
-// sisi belakang model, bukan pose/sudut bebas. Field request `anglePoseId`
-// DIHAPUS total — tidak ada lagi validasi "pose angle harus beda dari pose
-// utama" karena memang sekarang selalu pose yang sama.
+// pilih pose) — ternyata itu bukan yang dimaksud admin. "Angle" disederhanakan
+// jadi otomatis BELAKANG, tanpa perlu pilih pose sama sekali. Field request
+// `anglePoseId` DIHAPUS total.
+//
+// REVISI #9 (Agustus 2026, segera setelah #8 gagal di tes nyata — hasil
+// "angle" malah keluar foto DEPAN lagi, bukan belakang): pendekatan #8
+// (pakai poseImageUrl yang SAMA dgn utama + instruksi teks isBackView di
+// prompt) TERBUKTI tidak reliable — model AI (Nano Banana Pro) lebih niru
+// struktur visual foto referensi pose drpd ikutin instruksi teks "putar ke
+// belakang" secara konsisten. Fix: sekarang pakai FOTO REFERENSI ASLI yang
+// benar-benar menunjukkan belakang model — admin tandai SATU pose per model
+// sbg "Pose Belakang" (ai_poses.is_back_view, lihat app/poses/page.tsx),
+// dilakukan SEKALI per model (bukan tiap generate, jadi tetap sesuai
+// permintaan admin "ga usah pilih pose lagi" di level per-generate). Kalau
+// model belum punya pose bertanda ini, generate-set GAGAL dgn error jelas
+// drpd diam-diam menghasilkan foto depan lagi. Flag isBackView tetap dikirim
+// (reinforcement tambahan di prompt), tapi sekarang DIPASANGKAN dengan foto
+// referensi belakang yang genuin, bukan pengganti satu-satunya.
+//
+// REVISI #10 (Agustus 2026, post-mortem 500 error nyata — admin lapor
+// "Failed to load resource: 500" + set tersangkut di 2/4 foto, "processing
+// ga berhenti"): dicek lewat Supabase get_logs, penyebab ASLI ada di DB,
+// bukan di logic REVISI #7-#9 di atas — migrasi yang nambah role
+// "kolase_gabungan"/"kolase_detail" (REVISI #7) LUPA update CHECK
+// constraint `ai_generations_image_role_check` di database (cuma
+// TypeScript type & kode yang diupdate). Akibatnya SETIAP insert baris
+// kolase_gabungan/kolase_detail gagal dgn Postgres 400, dan karena kode
+// lama pakai `gen!.id` tanpa cek `error` hasil insert, request CRASH
+// (uncaught TypeError) begitu insert gagal -> HTTP 500, set tersangkut
+// permanen di status "processing". Fix waktu itu: (1) migration
+// `ai_generations_image_role_add_kolase_roles` nambah 2 role itu ke
+// constraint, (2) semua insert `ai_generations` cek `error`/`!gen`
+// eksplisit sebelum lanjut.
+//
+// REVISI #11 (Agustus 2026, segera setelah #10 — admin: "ga sesuai yang
+// saya mau deh, balik ke 2 foto aja, depan dan belakang, dah cukup"): admin
+// menolak arah "4 foto tetap" (REVISI #7-#10) sepenuhnya. Set foto sekarang
+// KEMBALI ke cuma 2 deliverable: "utama" (badan penuh, pose depan) & "angle"
+// (badan penuh, otomatis dari belakang model — logic REVISI #9 TETAP
+// dipakai, itu bukan bagian yang ditolak). Kolase gabungan, kolase detail,
+// dan 2 crop close-up tersembunyi yang jadi bahan kolase_detail SEMUA
+// DIHAPUS dari alur generate-set (tidak digenerate/disusun lagi sama
+// sekali). Constraint DB & tipe TypeScript ImageRole SENGAJA TETAP
+// mengizinkan "kolase_gabungan"/"kolase_detail" (TIDAK di-revert) — itu
+// cuma utk kompatibilitas baca/regenerate riwayat LAMA yang sudah kadung
+// punya baris kolase (lihat app/api/generations/[id]/regenerate/route.ts),
+// bukan berarti fitur ini masih dipakai utk generate baru. lib/image-
+// template/set-collage.tsx juga TIDAK dihapus, dgn alasan yang sama.
 //
 // POST /api/generate-set — PRD §15 & §7.6.
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { runNanoBananaGenerate } from "@/lib/prompts/nano-banana-generate";
-import { runDetailCrop } from "@/lib/prompts/stage2";
 import { composeBackground, type BackgroundMode } from "@/lib/prompts/background-composer";
-import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-template/set-collage";
-import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import type { AccessoryPresetRow, BackgroundPresetRow } from "@/types/database";
+// REVISI #11 — runDetailCrop, renderKolaseGabunganPng/renderKolaseDetailPng,
+// uploadBufferToStorage TIDAK dipakai lagi di file ini (kolase/crop close-up
+// dihapus dari alur generate-set). Masih dipakai di app/api/generations/
+// [id]/regenerate/route.ts utk kompatibilitas riwayat lama, sengaja TIDAK
+// dihapus dari sana.
 
 const productImagesSchema = z.object({
   front: z.string().url(),
@@ -134,24 +176,13 @@ const requestSchema = z.object({
     .default([]),
 });
 
-// Deskripsi area zoom untuk foto "detail" — diturunkan dari foto utama
-// lewat Kontext (crop/zoom murni, lihat lib/prompts/stage2.ts).
-// REVISI #7: SELALU persis 2 dipakai (bahan kolase_detail) — kerah/leher
-// utk inset #1, manset/lengan utk inset #2 (lihat renderKolaseDetailPng).
-const DETAIL_FOCUS_AREAS = [
-  "collar and neckline embroidery",
-  "sleeve cuff and sleeve embroidery detail",
-];
-
 // Berapa banyak foto pose LAIN dari model yang sama dipakai sbg penguat
 // identitas di tiap pemanggilan Nano Banana Pro (di luar foto pose target).
 const IDENTITY_REFERENCE_COUNT = 2;
 
 // Estimasi Rp per panggilan (kurs ~Rp17.900/USD, Agustus 2026):
-// Nano Banana Pro $0.15/gambar (resolusi 1K) ~ Rp2.700, Kontext Pro flat
-// $0.04 ~ Rp640.
-const COST_FULL_PASS = 2700; // 1x Nano Banana Pro (utama, tiap foto angle, DAN tiap foto seri)
-const COST_DERIVED = 640; // 1x Kontext saja (detail, diturunkan dari utama)
+// Nano Banana Pro $0.15/gambar (resolusi 1K) ~ Rp2.700.
+const COST_FULL_PASS = 2700; // 1x Nano Banana Pro (utama, foto angle, DAN tiap foto seri)
 
 // Kumpulkan semua URL foto produk warna UTAMA (depan + 6 slot detail
 // opsional) jadi satu array — dipakai utk foto utama/angle, DAN sbg
@@ -178,9 +209,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient();
 
-  // 1. Ambil pose utama — WAJIB milik model ini (§7.3). REVISI #8: "angle"
-  // TIDAK LAGI butuh pose kedua, dipakai ulang pose ini juga (lihat
-  // isBackView di runFullPass di bawah), jadi cukup 1 fetch.
+  // 1. Ambil pose utama — WAJIB milik model ini (§7.3).
   const { data: posesRaw, error: posesError } = await supabase
     .from("ai_poses")
     .select("id, model_id, reference_image_url")
@@ -191,16 +220,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Pose utama tidak ditemukan untuk model ini" }, { status: 404 });
   }
 
+  // 1a. REVISI #9 — ambil pose bertanda "Pose Belakang" (is_back_view) utk
+  // model ini, dipakai sbg foto referensi ASLI utk "angle". GAGAL jelas
+  // kalau belum ada, drpd diam-diam fallback ke pose depan (itu penyebab
+  // bug REVISI #8: hasil "angle" keluar foto depan lagi).
+  const { data: backPose } = await supabase
+    .from("ai_poses")
+    .select("id, reference_image_url")
+    .eq("model_id", input.modelId)
+    .eq("is_back_view", true)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!backPose) {
+    return NextResponse.json(
+      {
+        error:
+          "Model ini belum punya pose yang ditandai sbg \"Pose Belakang\" — tandai satu pose di halaman Poses dulu sebelum generate (dipakai otomatis utk foto Angle).",
+      },
+      { status: 400 }
+    );
+  }
+
   // 1b. Ambil beberapa foto pose LAIN dari model yang sama sbg penguat
   // identitas (lihat IDENTITY_REFERENCE_COUNT) — dipakai ulang di semua
   // pemanggilan Nano Banana Pro dalam set ini (termasuk tiap foto seri).
+  // +2 (bukan +1) krn sekarang ada 2 pose "target" berbeda dlm 1 set (pose
+  // utama & pose belakang) yang masing-masing perlu difilter keluar dari
+  // pool saat generate foto itu sendiri.
   const { data: identityPoolRaw } = await supabase
     .from("ai_poses")
     .select("id, reference_image_url")
     .eq("model_id", input.modelId)
     .eq("is_active", true)
     .order("created_at", { ascending: true })
-    .limit(IDENTITY_REFERENCE_COUNT + 1);
+    .limit(IDENTITY_REFERENCE_COUNT + 2);
   const identityPool = (identityPoolRaw ?? []).map((p) => p.reference_image_url);
 
   // 2. Ambil background presets aktif + accessory presets terpilih untuk komposisi (§7.4)
@@ -257,8 +310,6 @@ export async function POST(req: NextRequest) {
 
   let totalCost = 0;
   let anyFailed = false;
-  let utamaFinalUrl: string | null = null;
-  let angleFinalUrl: string | null = null;
   let sharedSeed: number | undefined;
 
   // Jalankan Nano Banana Pro penuh untuk 1 pose + 1 set foto produk — dipakai
@@ -271,11 +322,12 @@ export async function POST(req: NextRequest) {
     variantWarna?: string,
     variantProductImages?: Record<string, string>
   ) {
-    // REVISI #8 — "angle" pakai pose YANG SAMA dgn utama, dibedakan lewat
-    // flag isBackView di prompt (lihat nano-banana-generate.ts), bukan lewat
-    // pose_id kedua.
+    // REVISI #9 — "angle" pakai pose_id BEDA dari utama lagi (backPose, foto
+    // referensi ASLI belakang model), isBackView cuma reinforcement teks
+    // tambahan di prompt (lihat nano-banana-generate.ts), bukan lagi
+    // satu-satunya sinyal "ini harus jadi foto belakang".
     const isBackView = role === "angle";
-    const { data: gen } = await supabase
+    const { data: gen, error: genError } = await supabase
       .from("ai_generations")
       .insert({
         generation_set_id: set.id,
@@ -287,6 +339,18 @@ export async function POST(req: NextRequest) {
       })
       .select()
       .single();
+    // BUG FIX (Agustus 2026, post-mortem 500 error "4 foto tetap"): insert
+    // di atas TIDAK melempar exception kalau gagal (mis. violates check
+    // constraint) — supabase-js cuma isi field `error`, `gen` tetap
+    // null/undefined. Kode lama langsung pakai `gen!.id` tanpa cek, jadi
+    // kalau insert gagal, request CRASH (uncaught TypeError) -> HTTP 500,
+    // dan generation_set tersangkut permanen di status "processing" krn
+    // update status akhir di bawah tidak pernah tercapai. Sekarang cek
+    // eksplisit & keluar bersih (anyFailed=true) kalau insert gagal.
+    if (genError || !gen) {
+      anyFailed = true;
+      return null;
+    }
 
     try {
       const identityReferenceUrls = identityPool
@@ -318,7 +382,7 @@ export async function POST(req: NextRequest) {
           generation_time_ms: result.generationTimeMs,
           cost: COST_FULL_PASS,
         })
-        .eq("id", gen!.id);
+        .eq("id", gen.id);
 
       return result.imageUrl;
     } catch (err) {
@@ -326,27 +390,31 @@ export async function POST(req: NextRequest) {
       await supabase
         .from("ai_generations")
         .update({ status: "failed", error_message: (err as Error).message })
-        .eq("id", gen!.id);
+        .eq("id", gen.id);
       return null;
     }
   }
 
-  // --- Foto UTAMA (deliverable #1) ---
-  utamaFinalUrl = await runFullPass(
+  // --- Foto UTAMA (deliverable #1, badan penuh dari DEPAN) ---
+  await runFullPass(
     "utama",
     input.poseId,
     posesById.get(input.poseId)!.reference_image_url,
     primaryGarmentUrls
   );
 
-  // --- Foto ANGLE (deliverable #2, badan penuh dari BELAKANG) — REVISI #8:
-  // pakai pose YANG SAMA dgn utama (tidak ada pose_id kedua lagi), panggilan
-  // Nano Banana Pro independen dgn flag isBackView=true supaya AI merender
-  // scene yang sama dari sisi belakang model. ---
-  angleFinalUrl = await runFullPass(
+  // --- Foto ANGLE (deliverable #2, badan penuh dari BELAKANG) — REVISI #9:
+  // pakai pose bertanda "Pose Belakang" (backPose, foto referensi ASLI yang
+  // menunjukkan belakang model) — BUKAN lagi pose utama + instruksi teks
+  // (REVISI #8 terbukti tidak reliable). isBackView tetap dikirim sbg
+  // reinforcement tambahan di prompt. REVISI #11 — ini SEKARANG deliverable
+  // TERAKHIR dari set foto tetap (bukan lagi 2 dari 4) — kolase & crop
+  // close-up yang dulu disusun sesudah ini SEMUA dihapus, lihat header
+  // file. ---
+  await runFullPass(
     "angle",
-    input.poseId,
-    posesById.get(input.poseId)!.reference_image_url,
+    backPose.id,
+    backPose.reference_image_url,
     primaryGarmentUrls
   );
 
@@ -366,115 +434,6 @@ export async function POST(req: NextRequest) {
       entry.warna,
       { image: entry.image }
     );
-  }
-
-  // --- 2 crop close-up (bahan kolase_detail, REVISI #7) — diturunkan dari
-  // utama lewat Kontext, SAMA seperti role "detail" versi lama, TAPI
-  // sekarang TIDAK disimpan sbg baris ai_generations sendiri (cuma
-  // variabel sementara) — lihat catatan REVISI #7 di header file. Biaya
-  // tetap dihitung (totalCost) walau tidak tampil sbg item terpisah. ---
-  let detailCropUrl1: string | null = null;
-  let detailCropUrl2: string | null = null;
-  if (utamaFinalUrl) {
-    try {
-      const crop1 = await runDetailCrop({
-        baseImageUrl: utamaFinalUrl,
-        focusArea: DETAIL_FOCUS_AREAS[0],
-        seed: sharedSeed,
-      });
-      detailCropUrl1 = crop1.imageUrl;
-      totalCost += COST_DERIVED;
-    } catch {
-      anyFailed = true;
-    }
-    try {
-      const crop2 = await runDetailCrop({
-        baseImageUrl: utamaFinalUrl,
-        focusArea: DETAIL_FOCUS_AREAS[1],
-        seed: sharedSeed,
-      });
-      detailCropUrl2 = crop2.imageUrl;
-      totalCost += COST_DERIVED;
-    } catch {
-      anyFailed = true;
-    }
-  } else {
-    anyFailed = true;
-  }
-
-  // --- KOLASE GABUNGAN (deliverable #3, REVISI #7) — cuma disusun kalau
-  // utama DAN angle keduanya berhasil (butuh 2 foto). Render lokal via
-  // next/og, TIDAK ADA biaya fal.ai tambahan. ---
-  if (utamaFinalUrl && angleFinalUrl) {
-    const { data: gen } = await supabase
-      .from("ai_generations")
-      .insert({ generation_set_id: set.id, image_role: "kolase_gabungan", status: "processing" })
-      .select()
-      .single();
-    try {
-      const startedAt = Date.now();
-      const buffer = await renderKolaseGabunganPng({
-        portraitUrl: utamaFinalUrl,
-        fullBodyUrl: angleFinalUrl,
-      });
-      const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
-      await supabase
-        .from("ai_generations")
-        .update({
-          output_image_url: url,
-          has_stage2: false,
-          status: "completed",
-          generation_time_ms: Date.now() - startedAt,
-          cost: 0,
-        })
-        .eq("id", gen!.id);
-    } catch (err) {
-      anyFailed = true;
-      await supabase
-        .from("ai_generations")
-        .update({ status: "failed", error_message: (err as Error).message })
-        .eq("id", gen!.id);
-    }
-  } else {
-    anyFailed = true;
-  }
-
-  // --- KOLASE DETAIL (deliverable #4, REVISI #7) — cuma butuh utama + 2
-  // crop close-up (tidak butuh angle). Render lokal via next/og, TIDAK ADA
-  // biaya fal.ai tambahan. ---
-  if (utamaFinalUrl && detailCropUrl1 && detailCropUrl2) {
-    const { data: gen } = await supabase
-      .from("ai_generations")
-      .insert({ generation_set_id: set.id, image_role: "kolase_detail", status: "processing" })
-      .select()
-      .single();
-    try {
-      const startedAt = Date.now();
-      const buffer = await renderKolaseDetailPng({
-        mainUrl: utamaFinalUrl,
-        detailUrl1: detailCropUrl1,
-        detailUrl2: detailCropUrl2,
-      });
-      const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
-      await supabase
-        .from("ai_generations")
-        .update({
-          output_image_url: url,
-          has_stage2: false,
-          status: "completed",
-          generation_time_ms: Date.now() - startedAt,
-          cost: 0,
-        })
-        .eq("id", gen!.id);
-    } catch (err) {
-      anyFailed = true;
-      await supabase
-        .from("ai_generations")
-        .update({ status: "failed", error_message: (err as Error).message })
-        .eq("id", gen!.id);
-    }
-  } else {
-    anyFailed = true;
   }
 
   await supabase

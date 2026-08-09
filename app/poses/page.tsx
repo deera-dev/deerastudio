@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Camera, Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Camera, Check, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -21,6 +21,16 @@ import type { AiModel, AiPose } from "@/types/database";
 // dikecilkan & ditaruh kiri (flex-between, bukan full-width lagi), + mode
 // edit inline per-card (sebelumnya cuma bisa aktifkan/nonaktifkan/hapus,
 // salah upload foto = hapus & mulai dari nol).
+//
+// REVISI (Agustus 2026, setelah foto "angle" di generate-set salah arah —
+// keluar depan lagi padahal maunya belakang): admin bisa tandai SATU pose
+// per model sbg "Pose Belakang" (is_back_view) di sini — foto referensi
+// ASLI yang menunjukkan belakang model, dipakai OTOMATIS oleh generate-set
+// utk foto "angle" (bukan lagi pose depan + instruksi teks "putar ke
+// belakang", itu tidak reliable). Setup SEKALI per model di sini, generate
+// tetap otomatis (admin tidak perlu pilih pose lagi tiap generate). Maks 1
+// pose per model boleh ditandai (partial unique index di DB) — menandai
+// pose baru otomatis melepas tanda dari pose lama.
 const SOURCE_OPTIONS: { value: AiPose["source"]; label: string }[] = [
   { value: "vendor_archive", label: "Arsip vendor lama" },
   { value: "new_shoot", label: "Foto baru" },
@@ -109,6 +119,35 @@ export default function PosesPage() {
   async function toggleActive(pose: AiPose) {
     const supabase = createClient();
     await supabase.from("ai_poses").update({ is_active: !pose.is_active }).eq("id", pose.id);
+    loadPoses(selectedModelId);
+  }
+
+  // Tandai/lepas tanda "Pose Belakang" — maks 1 per model (partial unique
+  // index ai_poses_one_back_view_per_model). Kalau menandai pose baru,
+  // lepas dulu tanda dari pose lama di model yang sama (dua update
+  // berurutan, bukan transaksi — cukup aman utk tool admin internal).
+  async function toggleBackView(pose: AiPose) {
+    const supabase = createClient();
+    const nextValue = !pose.is_back_view;
+    if (nextValue) {
+      const currentBack = poses.find((p) => p.is_back_view && p.id !== pose.id);
+      if (currentBack) {
+        await supabase.from("ai_poses").update({ is_back_view: false }).eq("id", currentBack.id);
+      }
+    }
+    const { error } = await supabase
+      .from("ai_poses")
+      .update({ is_back_view: nextValue })
+      .eq("id", pose.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      nextValue
+        ? `"${pose.name}" ditandai sbg Pose Belakang`
+        : `Tanda Pose Belakang dilepas dari "${pose.name}"`
+    );
     loadPoses(selectedModelId);
   }
 
@@ -352,14 +391,24 @@ export default function PosesPage() {
                               {pose.description && (
                                 <p className="mb-3 text-xs text-text-muted">{pose.description}</p>
                               )}
-                              <div className="mb-3">
+                              <div className="mb-3 flex flex-wrap gap-1.5">
                                 <Badge tone={pose.is_active ? "success" : "muted"}>
                                   {pose.is_active ? "Aktif" : "Nonaktif"}
                                 </Badge>
+                                {pose.is_back_view && <Badge tone="gold">Pose Belakang</Badge>}
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" size="sm" onClick={() => toggleActive(pose)}>
                                   {pose.is_active ? "Nonaktifkan" : "Aktifkan"}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => toggleBackView(pose)}
+                                  title="Foto referensi ASLI belakang model — dipakai otomatis utk foto Angle di generate-set"
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                  {pose.is_back_view ? "Batal Tandai" : "Tandai Belakang"}
                                 </Button>
                                 <Button variant="outline" size="sm" onClick={() => startEdit(pose)}>
                                   <Pencil className="h-3.5 w-3.5" />

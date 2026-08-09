@@ -22,6 +22,15 @@ export interface AiPose {
   source: "vendor_archive" | "new_shoot" | "ai_generated";
   is_active: boolean;
   created_at: string;
+  // REVISI (Agustus 2026, setelah "4 foto tetap" REVISI #8 gagal — foto
+  // "angle" yang seharusnya belakang malah keluar depan lagi): foto
+  // referensi ASLI yang menunjukkan BELAKANG model, ditandai admin di
+  // halaman Poses. Generate-set otomatis pakai pose bertanda ini utk foto
+  // "angle" (bukan lagi pose depan + instruksi teks "putar ke belakang" —
+  // itu tidak reliable krn model AI cenderung niru foto referensi visual
+  // drpd ikutin instruksi teks). Maksimal 1 pose per model boleh true
+  // (partial unique index `ai_poses_one_back_view_per_model`).
+  is_back_view: boolean;
 }
 
 export interface BackgroundPresetRow {

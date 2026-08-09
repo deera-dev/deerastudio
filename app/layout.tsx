@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
+import { ImageLightboxHost } from "@/components/ui/ImageLightbox";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans">
         {children}
         <ConfirmDialogHost />
+        <ImageLightboxHost />
         <Toaster
           position="top-right"
           theme="light"

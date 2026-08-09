@@ -4,12 +4,19 @@
 // - role "utama"/"angle" -> ulangi generate dari nol lewat Nano Banana Pro
 //   ("Opsi B", Agustus 2026 — lihat catatan lengkap di
 //   app/api/generate-set/route.ts & lib/prompts/nano-banana-generate.ts),
-//   pakai pose_id yang tersimpan di baris generation itu sendiri. REVISI #8
-//   (Agustus 2026, segera setelah "4 foto tetap"): "angle" TIDAK LAGI pakai
-//   pose kedua yang beda — sekarang selalu pose_id yang SAMA dengan "utama"
-//   (fallback ke set.pose_id kalau baris lama belum punya pose_id sendiri),
-//   dibedakan cuma lewat flag isBackView=true supaya AI merender ulang
-//   scene yang sama dari sisi belakang model, bukan pose/sudut bebas.
+//   pakai pose_id yang tersimpan di baris generation itu sendiri. REVISI #9
+//   (Agustus 2026 — REVISI #8 "angle pakai pose sama + instruksi teks"
+//   terbukti tidak reliable, hasil "angle" malah keluar foto depan lagi):
+//   baris "angle" yang baru dibuat lewat generate-set/route.ts sekarang
+//   menyimpan pose_id milik pose yang ditandai "Pose Belakang"
+//   (ai_poses.is_back_view, lihat app/poses/page.tsx) — foto referensi ASLI
+//   yang menunjukkan belakang model, BUKAN lagi pose yang sama dgn "utama".
+//   isBackView tetap dikirim sbg reinforcement teks tambahan di prompt.
+//   CATATAN kompatibilitas: baris "angle" LAMA (dibuat sebelum REVISI #9,
+//   saat pose_id-nya masih sama dgn "utama") akan tetap regenerate pakai
+//   pose depan itu lagi kalau di-regenerate lewat endpoint ini — kalau ada
+//   set lama begini, generate ulang seluruh set dari awal drpd regenerate
+//   satu-satu.
 //   CATATAN: kalau utama diregenerate, foto detail/seri yang lain jadi tidak
 //   sinkron lagi (masih diturunkan/pakai data dari utama versi lama) —
 //   regenerate juga detail/seri terkait setelahnya kalau perlu.

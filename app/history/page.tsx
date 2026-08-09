@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Input, Label, Select, Textarea, FieldHint } from "@/components/ui/Field";
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
+import { showImageLightbox } from "@/components/ui/ImageLightbox";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { Generation, GenerationSet, GenerationSetStatus, ImageRole } from "@/types/database";
@@ -156,19 +157,20 @@ export default function HistoryPage() {
     setAddSeriWarna("");
     setAddSeriImage(null);
     setVideoPrompt("");
-    // Default: semua foto yang SUDAH SELESAI di set ini, urut sesuai
-    // tampilan grid (utama dulu, lalu detail/angle/seri) — admin tinggal
-    // uncheck yang tidak mau dipakai, atau toggle ulang utk atur urutan.
-    setComposeUrls(
-      (selected?.ai_generations ?? [])
-        .filter(
-          (g) =>
-            g.status === "completed" &&
-            g.output_image_url &&
-            !VIDEO_EXCLUDED_ROLES.includes(g.image_role)
-        )
-        .map((g) => g.output_image_url as string)
+    // REVISI (Agustus 2026, setelah review video test — admin kirim 5 video
+    // referensi ASLI hasil syuting kamera, bukan AI, jadi target "video
+    // gabungan berputar mulus" TIDAK realistis dicapai lewat sambung
+    // beberapa klip AI terpisah — hard-cut & foto sumber yang beda
+    // scene/pose bikin hasilnya "kasar" & produk kelihatan berubah).
+    // Default sekarang HANYA foto Utama (1 klip, 1 gerakan muter anggun,
+    // TANPA sambungan sama sekali) — paling mendekati gaya video referensi
+    // (1 shot kontinu). Admin tetap BISA tambah foto lain manual di grid di
+    // bawah kalau mau eksperimen video multi-klip, tapi itu bukan lagi
+    // default.
+    const utamaGen = (selected?.ai_generations ?? []).find(
+      (g) => g.image_role === "utama" && g.status === "completed" && g.output_image_url
     );
+    setComposeUrls(utamaGen ? [utamaGen.output_image_url as string] : []);
     if (!selected) {
       setProductWarnaOptions([]);
       return;
@@ -554,12 +556,24 @@ export default function HistoryPage() {
                         className="overflow-hidden rounded-lg border border-border bg-surface-2"
                       >
                         {gen.output_image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={gen.output_image_url}
-                            alt={gen.image_role}
-                            className="aspect-[3/4] w-full object-cover"
-                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              showImageLightbox(
+                                gen.output_image_url as string,
+                                ROLE_LABELS[gen.image_role] ?? gen.image_role
+                              )
+                            }
+                            className="block w-full"
+                            title="Lihat full screen"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={gen.output_image_url}
+                              alt={gen.image_role}
+                              className="aspect-[3/4] w-full object-cover"
+                            />
+                          </button>
                         ) : (
                           <div className="flex aspect-[3/4] w-full items-center justify-center text-xs text-text-faint">
                             {gen.status === "failed" ? "Gagal" : "..."}
@@ -626,10 +640,15 @@ export default function HistoryPage() {
                         </div>
                         <p className="mb-3 text-xs text-text-faint">
                           Foto tetap 100% sama — tiap foto terpilih di bawah dianimasikan jadi klip
-                          pendek (gerakan halus, tanpa audio), lalu SEMUA klip digabung urut jadi 1
-                          video utuh, ala video lookbook produk (badan penuh berputar anggun +
-                          close-up menelusuri detail kain/jahitan). Kling 3.0 Pro maks 15 detik per
-                          klip.
+                          pendek (gerakan halus, tanpa audio). Kling 3.0 Pro maks 15 detik per klip.
+                        </p>
+                        <p className="mb-3 rounded-md border border-border-strong bg-surface px-3 py-2 text-xs text-text-muted">
+                          <span className="font-medium text-text">Rekomendasi:</span> pakai 1 foto
+                          saja (Utama, sudah dipilih di bawah) — hasil video AI paling mulus &amp;
+                          tanpa sambungan kalau cuma 1 klip. Kalau lebih dari 1 foto dipilih, semua
+                          klip digabung urut jadi 1 video via hard-cut (tanpa transisi) — bisa
+                          terasa kasar/patah kalau foto sumbernya beda scene, dan sambungan pose
+                          besar (mis. depan→belakang) berisiko bikin kain terlihat berubah bentuk.
                         </p>
 
                         {videoStatus === "processing" && (

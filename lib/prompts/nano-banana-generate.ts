@@ -43,14 +43,17 @@ export interface NanoBananaGenerateInput {
   // 2 warna jadi satu.
   isColorVariant?: boolean;
   // REVISI #8 (Agustus 2026, "4 foto tetap" — angle disederhanakan jadi
-  // BELAKANG tanpa pilih pose lagi): true KHUSUS utk role "angle". Sebelumnya
-  // admin harus pilih pose model ke-2 yang berbeda dari galeri ai_poses —
-  // ternyata membingungkan & admin cuma mau foto belakang produk, bukan
-  // pose bebas apa pun. Sekarang "angle" pakai poseImageUrl yang SAMA dengan
-  // foto utama (tidak butuh pose_id kedua), dan flag ini menambah instruksi
-  // di buildPrompt supaya AI merender ulang scene yang sama dari SISI
-  // BELAKANG (model membelakangi kamera, punggung/belakang garmen yang
-  // tampil) — bukan dari pose/sudut bebas.
+  // BELAKANG tanpa pilih pose per-generate): true KHUSUS utk role "angle".
+  // REVISI #9 (segera setelah #8 gagal di tes nyata — hasil "angle" malah
+  // keluar foto DEPAN lagi): coba #8 pakai poseImageUrl yang SAMA dgn utama
+  // + instruksi teks "putar ke belakang" — TERBUKTI tidak reliable, model AI
+  // lebih niru struktur visual foto referensi drpd ikutin instruksi teks.
+  // Sekarang poseImageUrl utk role "angle" adalah foto referensi ASLI yang
+  // sudah menunjukkan belakang model (ai_poses.is_back_view, ditandai admin
+  // SEKALI per model di halaman Poses — lihat app/api/generate-set/route.ts
+  // REVISI #9), dan flag ini cuma REINFORCEMENT teks tambahan di buildPrompt
+  // (menegaskan "wajah tidak boleh terlihat, ini foto belakang"), bukan lagi
+  // satu-satunya sinyal yang menentukan arah foto.
   isBackView?: boolean;
 }
 
@@ -90,7 +93,7 @@ function buildPrompt(input: NanoBananaGenerateInput): string {
     "3. GARMENT CONSTRUCTION: the clothing must behave like a real physical garment on her body — realistic fabric weight, natural draping, folds, wrinkles, and tension appropriate to the fabric shown in the PRODUCT REFERENCE images. Do not paint the garment onto her body. Do not make it tighter than the actual product's cut.",
     "",
     input.isBackView
-      ? "4. POSE & FRAMING (BACK VIEW): render the SAME natural standing full-body fashion catalog pose and setting as a front-facing shot would use, but rotated so the model's BACK is fully visible to the camera — she is facing away from the camera, showing the back of the garment (back panel, back embroidery/motif if any, closure, hemline from behind, hijab drape from behind). Full body must be visible from head to toe. Do not show her face or the front of the garment in this shot. Do not crop the garment."
+      ? "4. POSE & FRAMING (BACK VIEW — critical): one of the MODEL REFERENCE images already shows this exact model with her BACK to the camera. Reproduce that same back-facing standing pose and camera framing in the new photograph — she must be facing AWAY from the camera the entire time, showing the back of the garment (back panel, back embroidery/motif if any, closure, hemline from behind, hijab drape from behind). Full body must be visible from head to toe. Her face must NOT be visible anywhere in this image — if any part of her face is visible, the pose is wrong. Do not crop the garment."
       : "4. POSE & FRAMING: a natural standing full-body fashion catalog pose. Full body must be visible from head to toe. Do not crop the garment. Do not zoom into just the face.",
     "",
     `5. BACKGROUND & SETTING: ${input.backgroundDescription}. The background must complement the garment and remain secondary to it — clean, elegant, premium studio/interior atmosphere suitable for an established Indonesian Muslim fashion brand. No distracting objects, no fantasy environment, no obviously AI-generated background.`,
