@@ -11,7 +11,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { submitVideoClipJob, VIDEO_DURATION_DEFAULT } from "@/lib/fal/video";
+import { logAiCost } from "@/lib/cost-log";
 import type { VideoClipJob } from "@/types/database";
+
+// Kling 3.0 Pro $0.112/detik (audio off) — SAMA dgn konstanta di
+// lib/fal/video.ts (COST_PER_SECOND_RP), versi USD krn ai_cost_log
+// menyimpan cost_usd. Dicatat DI SINI (bukan di submitVideoClipJob yang
+// dipakai bareng History) supaya TIDAK dobel-hitung dgn
+// ai_generation_sets.video_cost milik History yang sudah dicatat sendiri
+// di app/api/generation-sets/[id]/generate-video/route.ts.
+const KLING_COST_PER_SECOND_USD = 0.112;
 
 const requestSchema = z.object({
   sourceImageUrls: z.array(z.string().url()).min(1).max(10),
@@ -32,6 +41,11 @@ export async function POST(req: NextRequest) {
           startImageUrl: sourceUrl,
           prompt: body.data.prompt,
           durationSeconds: body.data.durationPerClipSeconds,
+        });
+        void logAiCost({
+          feature: "kling_video_clip",
+          costUsd: KLING_COST_PER_SECOND_USD * body.data.durationPerClipSeconds,
+          note: "Content Studio",
         });
         return { requestId, sourceUrl, status: "queued", clipUrl: null };
       })

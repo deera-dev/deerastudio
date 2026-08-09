@@ -1,22 +1,43 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock, Film, Loader2, Plus, RefreshCw, Sparkles, UploadCloud } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Film,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Sparkles,
+  UploadCloud,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Label, Select, Textarea, FieldHint } from "@/components/ui/Field";
+import { Input, Label, Select, Textarea, FieldHint } from "@/components/ui/Field";
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import type { Generation, GenerationSet, GenerationSetStatus } from "@/types/database";
+import type { Generation, GenerationSet, GenerationSetStatus, ImageRole } from "@/types/database";
 
 // History — riwayat per SKU/set (PRD §7.7, §14). Publish push hasil terpilih
 // ke katalog Deera lewat Cloudinary (PRD §15 v0.4).
+//
+// REVISI Agustus 2026 v2 (feedback admin: "dibuat pagination aja ya,
+// nanti makin banyak malah susah liatnya, dan bikin search juga ya") —
+// sebelumnya .limit(50) client-side TANPA search sama sekali (riwayat di
+// luar 50 set terbaru sudah tidak kelihatan lagi!). Sekarang pagination +
+// search kode produk SERVER-SIDE lewat .range()/.ilike() + count:"exact",
+// jadi tetap ringan & benar berapa pun jumlah riwayatnya.
+const PAGE_SIZE = 10;
+
 type SetWithGenerations = GenerationSet & { ai_generations: Generation[] };
 
 const STATUS_TONE: Record<GenerationSetStatus, "success" | "gold" | "danger" | "muted"> = {
@@ -26,6 +47,25 @@ const STATUS_TONE: Record<GenerationSetStatus, "success" | "gold" | "danger" | "
   queued: "muted",
   failed: "danger",
 };
+
+// REVISI #7 (Agustus 2026, "4 foto tetap") — label ramah utk role baru,
+// dipakai di grid hasil di bawah (menggantikan raw snake_case).
+const ROLE_LABELS: Record<ImageRole, string> = {
+  utama: "Utama",
+  angle: "Angle (Belakang)",
+  seri: "Seri Warna",
+  kolase_gabungan: "Kolase Gabungan",
+  kolase_detail: "Kolase Detail",
+  detail: "Detail (lama)",
+};
+
+// Kolase (kolase_gabungan/kolase_detail) adalah gambar KOMPOSIT statis —
+// ada logo brand & label teks "DETAIL" nempel di atasnya. Menganimasikannya
+// lewat Kling akan bikin logo/teks itu ikut terdistorsi gerakan kamera,
+// jadi kedua role ini SENGAJA dikecualikan dari daftar foto yang bisa
+// dipilih utk "Video Cerita Gabungan" (lihat lib/prompts/video-motion.ts
+// utk catatan sisi lain dari pengecualian yang sama).
+const VIDEO_EXCLUDED_ROLES: ImageRole[] = ["kolase_gabungan", "kolase_detail"];
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("id-ID", {
@@ -41,6 +81,14 @@ export default function HistoryPage() {
   const [sets, setSets] = useState<SetWithGenerations[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Search kode produk + pagination server-side (lihat catatan REVISI v2
+  // di atas). searchInput = ketikan mentah (langsung), search = versi
+  // ter-debounce yang benar-benar dipakai query — sama pola dgn search
+  // produk di app/generate/page.tsx.
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   // "+ Tambah Warna Seri" — nambah warna baru ke set yang SUDAH ADA tanpa
@@ -62,24 +110,42 @@ export default function HistoryPage() {
   const [submittingVideo, setSubmittingVideo] = useState(false);
   const [videoNowTick, setVideoNowTick] = useState(() => Date.now()); // detak elapsed-time saat processing
 
-  async function load() {
+  async function load(searchTerm: string, pageIndex: number) {
     setLoading(true);
     const supabase = createClient();
-    const { data } = await supabase
+    let query = supabase
       .from("ai_generation_sets")
-      .select("*, ai_generations(*)")
-      .order("created_at", { ascending: false })
-      .limit(50);
+      .select("*, ai_generations(*)", { count: "exact" })
+      .order("created_at", { ascending: false });
+    if (searchTerm.trim()) {
+      query = query.ilike("product_kode", `%${searchTerm.trim()}%`);
+    }
+    const from = pageIndex * PAGE_SIZE;
+    const { data, count } = await query.range(from, from + PAGE_SIZE - 1);
     const rows = (data as SetWithGenerations[]) ?? [];
     setSets(rows);
-    if (rows.length > 0 && !selectedId) setSelectedId(rows[0].id);
+    setTotalCount(count ?? 0);
+    // Pertahankan seleksi kalau item yang sedang dibuka masih ada di
+    // halaman/hasil search baru ini — kalau tidak (pindah halaman/search
+    // berubah), default ke item pertama.
+    setSelectedId((prev) => (rows.some((r) => r.id === prev) ? prev : (rows[0]?.id ?? null)));
     setLoading(false);
   }
 
+  // Debounce ketikan search -> reset ke halaman 0 (hasil search baru
+  // mulai dari awal, bukan lanjut di halaman lama yang mungkin sudah
+  // tidak relevan).
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    load(search, page);
+  }, [search, page]);
 
   const selected = sets.find((s) => s.id === selectedId) ?? null;
 
@@ -95,7 +161,12 @@ export default function HistoryPage() {
     // uncheck yang tidak mau dipakai, atau toggle ulang utk atur urutan.
     setComposeUrls(
       (selected?.ai_generations ?? [])
-        .filter((g) => g.status === "completed" && g.output_image_url)
+        .filter(
+          (g) =>
+            g.status === "completed" &&
+            g.output_image_url &&
+            !VIDEO_EXCLUDED_ROLES.includes(g.image_role)
+        )
         .map((g) => g.output_image_url as string)
     );
     if (!selected) {
@@ -172,6 +243,8 @@ export default function HistoryPage() {
     (w) => w !== selected?.product_warna && !usedSeriWarna.has(w)
   );
 
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
   async function refreshOne(id: string) {
     const supabase = createClient();
     const { data } = await supabase
@@ -227,7 +300,7 @@ export default function HistoryPage() {
   }
 
   async function handleGenerateVideo() {
-    if (!selected || composeUrls.length === 0 || !videoPrompt.trim()) return;
+    if (!selected || composeUrls.length === 0) return;
     setSubmittingVideo(true);
     try {
       const res = await fetch(`/api/generation-sets/${selected.id}/generate-video`, {
@@ -235,7 +308,7 @@ export default function HistoryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sourceImageUrls: composeUrls,
-          prompt: videoPrompt.trim(),
+          prompt: videoPrompt.trim() || undefined,
           durationPerClipSeconds: videoDuration,
         }),
       });
@@ -254,10 +327,16 @@ export default function HistoryPage() {
   async function handlePublish() {
     if (!selected) return;
     const utama = selected.ai_generations.find((g) => g.image_role === "utama");
-    // "detail" (close-up) & "angle" (badan penuh pose lain) sama-sama masuk
-    // slot products.detail — Deera belum punya kolom terpisah utk foto angle.
+    // REVISI #7 (Agustus 2026, "4 foto tetap") — slot products.detail
+    // (galeri foto tambahan di katalog) sekarang diisi dari SEMUA baris
+    // non-utama/non-seri di set ini: "angle" (badan penuh pose lain),
+    // "kolase_gabungan" & "kolase_detail" (kolase bermerek) sbg bonus foto
+    // galeri. Ditulis generik (bukan whitelist per-role) supaya publish
+    // TETAP jalan apa adanya utk riwayat lama yang masih punya baris
+    // "detail" (crop close-up, sebelum REVISI #7 menghapus role itu dari
+    // alur baru) — Deera belum punya kolom terpisah utk tiap role ini.
     const detail = selected.ai_generations.filter(
-      (g) => g.image_role === "detail" || g.image_role === "angle"
+      (g) => g.image_role !== "utama" && g.image_role !== "seri"
     );
     // Bisa lebih dari satu warna seri per set (satu baris per warna varian).
     const seri = selected.ai_generations.filter((g) => g.image_role === "seri");
@@ -341,12 +420,29 @@ export default function HistoryPage() {
         description="Semua set foto yang pernah digenerate. Pilih satu untuk lihat detail, generate ulang gambar, atau publish ke katalog."
       />
 
+      {/* Search kode produk — di luar kondisi loading/kosong di bawah,
+          supaya tetap kelihatan & bisa dikosongkan lagi walau hasil
+          search-nya 0. */}
+      <div className="relative mb-4 max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint" />
+        <Input
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Cari kode produk (mis. D-018-KBR)..."
+          className="pl-9"
+        />
+      </div>
+
       {loading ? (
         <p className="text-sm text-text-faint">Memuat...</p>
       ) : sets.length === 0 ? (
         <Card className="flex flex-col items-center justify-center gap-3 py-16 text-center">
           <Clock className="h-8 w-8 text-text-faint" />
-          <p className="text-sm text-text-muted">Belum ada riwayat generate.</p>
+          <p className="text-sm text-text-muted">
+            {search
+              ? `Tidak ada riwayat dengan kode produk yang cocok "${search}".`
+              : "Belum ada riwayat generate."}
+          </p>
         </Card>
       ) : (
         // REVISI Agustus 2026 v2 (feedback admin: "column base") — daftar
@@ -389,6 +485,37 @@ export default function HistoryPage() {
               );
             })}
           </div>
+
+          {/* Pagination — server-side, lihat load() di atas. */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-3 text-xs text-text-faint">
+              <span>
+                {totalCount} riwayat total · halaman {page + 1} dari {totalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Sebelumnya
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages - 1}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                >
+                  Berikutnya
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
 
           {selected && (
             <motion.div
@@ -440,8 +567,8 @@ export default function HistoryPage() {
                         )}
                         <div className="flex items-center justify-between p-2">
                           <div>
-                            <div className="text-xs font-medium capitalize text-text">
-                              {gen.image_role}
+                            <div className="text-xs font-medium text-text">
+                              {ROLE_LABELS[gen.image_role] ?? gen.image_role}
                               {gen.image_role === "seri" && gen.variant_warna && (
                                 <span className="text-text-muted"> — {gen.variant_warna}</span>
                               )}
@@ -473,7 +600,10 @@ export default function HistoryPage() {
 
 {(() => {
                     const completedPhotos = selected.ai_generations.filter(
-                      (g) => g.status === "completed" && g.output_image_url
+                      (g) =>
+                        g.status === "completed" &&
+                        g.output_image_url &&
+                        !VIDEO_EXCLUDED_ROLES.includes(g.image_role)
                     );
                     const videoStatus = selected.video_status;
                     const clipJobs = selected.video_clip_jobs ?? [];
@@ -497,7 +627,9 @@ export default function HistoryPage() {
                         <p className="mb-3 text-xs text-text-faint">
                           Foto tetap 100% sama — tiap foto terpilih di bawah dianimasikan jadi klip
                           pendek (gerakan halus, tanpa audio), lalu SEMUA klip digabung urut jadi 1
-                          video utuh. Kling 3.0 Pro maks 15 detik per klip.
+                          video utuh, ala video lookbook produk (badan penuh berputar anggun +
+                          close-up menelusuri detail kain/jahitan). Kling 3.0 Pro maks 15 detik per
+                          klip.
                         </p>
 
                         {videoStatus === "processing" && (
@@ -573,7 +705,7 @@ export default function HistoryPage() {
                               <div className="min-w-[240px] flex-1">
                                 <div className="mb-1.5 flex items-center justify-between">
                                   <Label htmlFor="video-prompt" className="mb-0">
-                                    Motion Prompt (Inggris)
+                                    Catatan Gaya (opsional, Inggris)
                                   </Label>
                                   <button
                                     type="button"
@@ -590,14 +722,22 @@ export default function HistoryPage() {
                                   rows={2}
                                   value={videoPrompt}
                                   onChange={(e) => setVideoPrompt(e.target.value)}
-                                  placeholder="mis. Fabric sways gently in a soft breeze, slow camera push-in..."
+                                  placeholder="Kosongkan aja kalau tidak perlu — arah gerakan tiap foto (berputar/pan-zoom) sudah otomatis. Isi cuma kalau mau tambahan mood, mis. warm golden hour lighting..."
                                 />
+                                <FieldHint>
+                                  Badan penuh (utama/angle/seri) otomatis dapat gerakan model berputar
+                                  anggun; close-up (detail, kalau ada di riwayat lama) otomatis dapat
+                                  kamera pan &amp; zoom menelusuri tekstur. Teks di sini cuma ditempel
+                                  sbg catatan mood tambahan, bukan pengganti arah gerakan itu. Foto
+                                  Kolase Gabungan/Kolase Detail tidak bisa dipilih di sini — sudah ada
+                                  logo &amp; label teks yang akan terdistorsi kalau dianimasikan.
+                                </FieldHint>
                               </div>
                               <Button
                                 type="button"
                                 size="sm"
                                 loading={submittingVideo || videoStatus === "processing"}
-                                disabled={composeUrls.length === 0 || !videoPrompt.trim()}
+                                disabled={composeUrls.length === 0}
                                 onClick={handleGenerateVideo}
                               >
                                 <Film className="h-4 w-4" />

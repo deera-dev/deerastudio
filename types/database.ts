@@ -72,6 +72,7 @@ export interface GenerationSet {
     back?: string;
     detailNeck?: string;
     detailSleeve?: string;
+    detailHand?: string; // close-up pergelangan/manset tangan — BEDA dari detailSleeve (lengan/bahu)
     detailChest?: string;
     detailHem?: string;
     fullBody?: string;
@@ -108,23 +109,48 @@ export interface VideoClipJob {
 }
 
 // "detail" = crop close-up (jahitan/kancing/kerah) diturunkan dari foto
-// utama. "angle" = foto badan penuh dari pose LAIN (generate independen
-// dengan pose_id berbeda). "seri" = varian WARNA lain dari produk yang sama
-// (REVISI Agustus 2026, final/hemat-foto: BUKAN recolor tebakan AI dari foto
-// utama, dan BUKAN lagi upload set foto lengkap per warna — admin cukup
-// upload SATU foto full-body per warna lewat variant_product_images.image;
-// referensi bentuk/tekstur/bordir dipakai ulang dari foto warna utama
+// utama — SEJAK REVISI #7 (Agustus 2026, "4 foto tetap") TIDAK PERNAH lagi
+// disimpan sbg baris ai_generations (lihat app/api/generate-set/route.ts);
+// tipe ini dipertahankan HANYA utk baris-baris LAMA yang sudah ada di DB
+// sebelum revisi itu. "angle" = foto badan penuh DARI BELAKANG — salah satu
+// dari 4 deliverable set foto tetap (persis 1). REVISI #8 (Agustus 2026,
+// segera setelah #7): awalnya "angle" pakai pose_id KEDUA yang beda dari
+// utama (admin harus pilih dari galeri pose) — admin klarifikasi maksudnya
+// cukup foto belakang, TIDAK perlu pilih pose lagi. Sekarang baris "angle"
+// menyimpan pose_id yang SAMA dengan baris "utama" di set yang sama,
+// dibedakan lewat flag isBackView=true saat generate (lihat
+// lib/prompts/nano-banana-generate.ts & app/api/generate-set/route.ts). "seri" =
+// varian WARNA lain dari produk yang sama (REVISI Agustus 2026, final/
+// hemat-foto: BUKAN recolor tebakan AI dari foto utama, dan BUKAN lagi
+// upload set foto lengkap per warna — admin cukup upload SATU foto
+// full-body per warna lewat variant_product_images.image; referensi
+// bentuk/tekstur/bordir dipakai ulang dari foto warna utama
 // (ai_generation_sets.product_images). Tiap warna tetap di-generate FULL &
-// independen lewat Nano Banana Pro dgn pose sama dengan utama).
-// variant_warna simpan nama warnanya.
-export type ImageRole = "utama" | "detail" | "seri" | "angle";
+// independen lewat Nano Banana Pro dgn pose sama dengan utama, fitur INI
+// TETAP terpisah/opsional dari 4-foto-tetap). variant_warna simpan nama
+// warnanya.
+//
+// "kolase_gabungan"/"kolase_detail" (BARU REVISI #7, Agustus 2026) — dua
+// deliverable TAMBAHAN yang membuat total set SELALU 4 foto: kolase
+// gabungan (foto utama + angle disusun berdampingan + logo brand) & kolase
+// detail (foto utama full-bleed + 2 inset close-up berlabel DETAIL + logo
+// brand). BUKAN panggilan AI baru — cuma compositing lokal (next/og, lihat
+// lib/image-template/set-collage.tsx), makanya `cost` selalu 0 utk kedua
+// role ini.
+export type ImageRole =
+  | "utama"
+  | "detail"
+  | "seri"
+  | "angle"
+  | "kolase_gabungan"
+  | "kolase_detail";
 export type GenerationStatus = "queued" | "processing" | "completed" | "failed";
 
 export interface Generation {
   id: string;
   generation_set_id: string;
   image_role: ImageRole;
-  pose_id: string | null; // hanya terisi utk role "utama"/"angle" (VTO independen)
+  pose_id: string | null; // hanya terisi utk role "utama"/"angle" (VTO independen) — REVISI #8: "angle" simpan pose_id yg SAMA dgn "utama" di set yg sama, dibedakan lewat isBackView saat generate, bukan pose_id berbeda
   variant_warna: string | null; // hanya terisi utk role "seri" — nama warna varian, mis. "MERAH"
   variant_product_images: Record<string, string> | null; // hanya terisi utk role "seri" — { image: "<url foto full-body warna itu>" }, dipakai ulang saat regenerate (lihat REVISI hemat-foto)
   vto_image_url: string | null;

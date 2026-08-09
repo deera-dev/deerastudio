@@ -42,6 +42,16 @@ export interface NanoBananaGenerateInput {
   // klausa 2b di buildPrompt) supaya AI tidak salah warna/tidak nge-blend
   // 2 warna jadi satu.
   isColorVariant?: boolean;
+  // REVISI #8 (Agustus 2026, "4 foto tetap" — angle disederhanakan jadi
+  // BELAKANG tanpa pilih pose lagi): true KHUSUS utk role "angle". Sebelumnya
+  // admin harus pilih pose model ke-2 yang berbeda dari galeri ai_poses —
+  // ternyata membingungkan & admin cuma mau foto belakang produk, bukan
+  // pose bebas apa pun. Sekarang "angle" pakai poseImageUrl yang SAMA dengan
+  // foto utama (tidak butuh pose_id kedua), dan flag ini menambah instruksi
+  // di buildPrompt supaya AI merender ulang scene yang sama dari SISI
+  // BELAKANG (model membelakangi kamera, punggung/belakang garmen yang
+  // tampil) — bukan dari pose/sudut bebas.
+  isBackView?: boolean;
 }
 
 export interface NanoBananaGenerateResult {
@@ -73,9 +83,15 @@ function buildPrompt(input: NanoBananaGenerateInput): string {
       ? `2b. MIXED COLOR REFERENCE HANDLING (critical): the PRODUCT REFERENCE images in this request show the SAME garment design in TWO different colorways — most of them are the brand's default/primary color, and exactly ONE photo shows the actual TARGET color for this output: "${input.productWarna}". Identify which reference photo's fabric color matches the name "${input.productWarna}" and use ONLY that photo as the source of truth for the garment's color and fabric shade. Use ALL the OTHER reference photos — regardless of their color — only for garment shape, cut, silhouette, embroidery pattern, motif placement, stitching, and construction detail; those structural details are identical across colorways and must not change. Do not blend, average, or mix the colors from different reference photos together — the final garment color must exactly match the single "${input.productWarna}" reference photo, nothing else.`
       : "",
     "",
+    input.isBackView
+      ? "2c. BACK VIEW REFERENCE PRIORITY: if one of the PRODUCT REFERENCE images shows the back of the garment, treat it as the primary source of truth for this back-view shot — reproduce its back panel, closure, seams, and any back-facing embroidery/motif exactly. If no dedicated back-view reference photo is given, infer the back construction logically from the front/side reference photos (typical construction for this garment type), keeping the same fabric, color, and trims."
+      : "",
+    "",
     "3. GARMENT CONSTRUCTION: the clothing must behave like a real physical garment on her body — realistic fabric weight, natural draping, folds, wrinkles, and tension appropriate to the fabric shown in the PRODUCT REFERENCE images. Do not paint the garment onto her body. Do not make it tighter than the actual product's cut.",
     "",
-    "4. POSE & FRAMING: a natural standing full-body fashion catalog pose. Full body must be visible from head to toe. Do not crop the garment. Do not zoom into just the face.",
+    input.isBackView
+      ? "4. POSE & FRAMING (BACK VIEW): render the SAME natural standing full-body fashion catalog pose and setting as a front-facing shot would use, but rotated so the model's BACK is fully visible to the camera — she is facing away from the camera, showing the back of the garment (back panel, back embroidery/motif if any, closure, hemline from behind, hijab drape from behind). Full body must be visible from head to toe. Do not show her face or the front of the garment in this shot. Do not crop the garment."
+      : "4. POSE & FRAMING: a natural standing full-body fashion catalog pose. Full body must be visible from head to toe. Do not crop the garment. Do not zoom into just the face.",
     "",
     `5. BACKGROUND & SETTING: ${input.backgroundDescription}. The background must complement the garment and remain secondary to it — clean, elegant, premium studio/interior atmosphere suitable for an established Indonesian Muslim fashion brand. No distracting objects, no fantasy environment, no obviously AI-generated background.`,
     "",

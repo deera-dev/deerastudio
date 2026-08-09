@@ -9,6 +9,7 @@
 // eksplisit utk TIDAK mengarang testimoni, diskon, angka stok, atau klaim
 // apa pun yang tidak ada di input.
 import { generateText } from "../fal/text";
+import { logAiCost } from "../cost-log";
 
 export type ContentTheme = "produk_highlight" | "tips_styling" | "brand_story" | "promo" | "brand_awareness";
 export type ContentType = "feed_single" | "carousel" | "reel";
@@ -145,6 +146,7 @@ export async function generateCaption(
     temperature: 1,
     maxTokens: 600,
   });
+  void logAiCost({ feature: "text_gen_caption", costUsd: result.costUsd, note: input.product.kode });
 
   return parseCaptionOutput(result.output);
 }
@@ -269,6 +271,7 @@ export async function suggestHeadline(input: SuggestHeadlineInput): Promise<Sugg
     temperature: 1,
     maxTokens: 400,
   });
+  void logAiCost({ feature: "text_gen_headline", costUsd: result.costUsd, note: input.product.kode });
 
   return parseHeadlineOutput(result.output);
 }
@@ -382,6 +385,7 @@ export async function suggestStoryboard(input: SuggestStoryboardInput): Promise<
     temperature: 1,
     maxTokens: 900,
   });
+  void logAiCost({ feature: "text_gen_storyboard", costUsd: result.costUsd, note: input.product.kode });
 
   return parseStoryboardOutput(result.output, input.sceneCount);
 }
@@ -434,6 +438,7 @@ export async function suggestBottomCaption(input: SuggestBottomCaptionInput): Pr
     temperature: 1,
     maxTokens: 120,
   });
+  void logAiCost({ feature: "text_gen_bottom_caption", costUsd: result.costUsd, note: input.product.kode });
 
   return result.output.trim().replace(/^["\u201c\u2018]|["\u201d\u2019]$/g, "").trim();
 }
@@ -533,6 +538,11 @@ export async function suggestGroupStoryboard(
     systemPrompt: GROUP_STORYBOARD_SYSTEM_PROMPT,
     temperature: 1,
     maxTokens: 900,
+  });
+  void logAiCost({
+    feature: "text_gen_group_storyboard",
+    costUsd: result.costUsd,
+    note: input.products.map((p) => p.kode).join(","),
   });
 
   return parseGroupStoryboardOutput(result.output, input.sceneCount);

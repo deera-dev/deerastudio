@@ -39,6 +39,7 @@ type ProductImagesShape = {
   back?: string;
   detailNeck?: string;
   detailSleeve?: string;
+  detailHand?: string;
   detailChest?: string;
   detailHem?: string;
   fullBody?: string;
@@ -63,6 +64,7 @@ function collectGarmentUrls(images: ProductImagesShape) {
     images.detailChest,
     images.detailNeck,
     images.detailSleeve,
+    images.detailHand,
     images.detailHem,
     images.back,
     images.fullBody,

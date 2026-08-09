@@ -4,9 +4,12 @@
 // - role "utama"/"angle" -> ulangi generate dari nol lewat Nano Banana Pro
 //   ("Opsi B", Agustus 2026 — lihat catatan lengkap di
 //   app/api/generate-set/route.ts & lib/prompts/nano-banana-generate.ts),
-//   pakai pose_id yang tersimpan di baris generation itu sendiri (lihat
-//   migration ai_fashion_studio_angle_role — pose_id per-generation, bukan
-//   cuma per-set, karena tiap foto "angle" pakai pose yang beda-beda).
+//   pakai pose_id yang tersimpan di baris generation itu sendiri. REVISI #8
+//   (Agustus 2026, segera setelah "4 foto tetap"): "angle" TIDAK LAGI pakai
+//   pose kedua yang beda — sekarang selalu pose_id yang SAMA dengan "utama"
+//   (fallback ke set.pose_id kalau baris lama belum punya pose_id sendiri),
+//   dibedakan cuma lewat flag isBackView=true supaya AI merender ulang
+//   scene yang sama dari sisi belakang model, bukan pose/sudut bebas.
 //   CATATAN: kalau utama diregenerate, foto detail/seri yang lain jadi tidak
 //   sinkron lagi (masih diturunkan/pakai data dari utama versi lama) —
 //   regenerate juga detail/seri terkait setelahnya kalau perlu.
@@ -22,11 +25,20 @@
 //   generate-set/route.ts. Prompt dikasih flag isColorVariant=true supaya
 //   AI tahu cara membedakan referensi warna vs referensi konstruksi (lihat
 //   klausa 2b di lib/prompts/nano-banana-generate.ts).
+// - role "kolase_gabungan"/"kolase_detail" (BARU Agustus 2026, "4 foto
+//   tetap", lihat app/api/generate-set/route.ts REVISI #7) -> BUKAN
+//   panggilan AI, cuma disusun ULANG (next/og) dari foto utama/angle yang
+//   SEDANG AKTIF di set ini. kolase_gabungan butuh utama+angle; kolase_detail
+//   generate ulang 2 crop close-up dari utama (Kontext) lalu disusun ulang
+//   — 2 crop itu TIDAK disimpan sbg baris sendiri (konsisten dgn alur
+//   generate-set awal).
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runNanoBananaGenerate } from "@/lib/prompts/nano-banana-generate";
 import { runDetailCrop } from "@/lib/prompts/stage2";
 import { composeBackground, type BackgroundMode } from "@/lib/prompts/background-composer";
+import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-template/set-collage";
+import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import type { BackgroundPresetRow, Generation } from "@/types/database";
 
 const DETAIL_FOCUS_AREAS = [
@@ -47,6 +59,7 @@ type ProductImagesShape = {
   back?: string;
   detailNeck?: string;
   detailSleeve?: string;
+  detailHand?: string;
   detailChest?: string;
   detailHem?: string;
   fullBody?: string;
@@ -58,6 +71,7 @@ function collectGarmentUrls(images: ProductImagesShape) {
     images.detailChest,
     images.detailNeck,
     images.detailSleeve,
+    images.detailHand,
     images.detailHem,
     images.back,
     images.fullBody,
@@ -149,6 +163,10 @@ export async function POST(
         backgroundDescription: background.description,
         productWarna: isSeri ? gen.variant_warna ?? undefined : set.product_warna ?? undefined,
         isColorVariant: isSeri,
+        // REVISI #8 — "angle" pakai pose YANG SAMA dgn utama (poseId di atas
+        // sudah fallback ke set.pose_id), dibedakan lewat flag ini supaya AI
+        // merender ulang scene yang sama dari sisi belakang model.
+        isBackView: gen.image_role === "angle",
       });
 
       await supabase
@@ -163,6 +181,91 @@ export async function POST(
         .eq("id", id);
 
       return NextResponse.json({ status: "completed", imageUrl: result.imageUrl });
+    }
+
+    // role "kolase_gabungan" — susun ULANG dari foto utama+angle yang SEDANG
+    // AKTIF di set ini (bukan panggilan AI, cost tetap 0).
+    if (gen.image_role === "kolase_gabungan") {
+      const { data: utamaRow } = await supabase
+        .from("ai_generations")
+        .select("output_image_url")
+        .eq("generation_set_id", set.id)
+        .eq("image_role", "utama")
+        .single();
+      const { data: angleRow } = await supabase
+        .from("ai_generations")
+        .select("output_image_url")
+        .eq("generation_set_id", set.id)
+        .eq("image_role", "angle")
+        .single();
+
+      if (!utamaRow?.output_image_url || !angleRow?.output_image_url) {
+        throw new Error(
+          "Foto utama/angle pada set ini belum ada/gagal — regenerate utama & angle dulu"
+        );
+      }
+
+      const buffer = await renderKolaseGabunganPng({
+        portraitUrl: utamaRow.output_image_url,
+        fullBodyUrl: angleRow.output_image_url,
+      });
+      const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
+
+      await supabase
+        .from("ai_generations")
+        .update({
+          vto_image_url: null,
+          output_image_url: url,
+          status: "completed",
+          generation_time_ms: null,
+          cost: 0,
+        })
+        .eq("id", id);
+
+      return NextResponse.json({ status: "completed", imageUrl: url });
+    }
+
+    // role "kolase_detail" — generate ulang 2 crop close-up dari foto utama
+    // yang SEDANG AKTIF (Kontext, sama seperti alur generate-set awal), lalu
+    // susun ulang jadi kolase. 2 crop itu TIDAK disimpan sbg baris sendiri.
+    if (gen.image_role === "kolase_detail") {
+      const { data: utamaRow } = await supabase
+        .from("ai_generations")
+        .select("output_image_url")
+        .eq("generation_set_id", set.id)
+        .eq("image_role", "utama")
+        .single();
+
+      if (!utamaRow?.output_image_url) {
+        throw new Error("Foto utama pada set ini belum ada/gagal — regenerate utama dulu");
+      }
+
+      const [crop1, crop2] = await Promise.all([
+        runDetailCrop({ baseImageUrl: utamaRow.output_image_url, focusArea: DETAIL_FOCUS_AREAS[0] }),
+        runDetailCrop({ baseImageUrl: utamaRow.output_image_url, focusArea: DETAIL_FOCUS_AREAS[1] }),
+      ]);
+
+      const buffer = await renderKolaseDetailPng({
+        mainUrl: utamaRow.output_image_url,
+        detailUrl1: crop1.imageUrl,
+        detailUrl2: crop2.imageUrl,
+      });
+      const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
+
+      await supabase
+        .from("ai_generations")
+        .update({
+          vto_image_url: null,
+          output_image_url: url,
+          status: "completed",
+          generation_time_ms: (crop1.generationTimeMs ?? 0) + (crop2.generationTimeMs ?? 0),
+          // 2 crop tersembunyi tetap pakai fal.ai (Kontext) — cost regenerate
+          // ini mencerminkan biaya nyata, beda dgn kolase_gabungan yg murni 0.
+          cost: COST_DERIVED * 2,
+        })
+        .eq("id", id);
+
+      return NextResponse.json({ status: "completed", imageUrl: url });
     }
 
     // role "detail" — turunkan ulang dari foto utama yang sedang aktif

@@ -1,141 +1,162 @@
-# PRD — AI Fashion Studio (Deera / Agumi)
+# PRD — Deera Studio (dulu "AI Fashion Studio")
 
-**Versi:** 0.5 (MVP — background dinamis & mewah, prioritas kualitas)
-**Tanggal:** 6 Agustus 2026
+**Versi:** 1.0 (mencerminkan implementasi yang sudah LIVE, dipakai internal)
+**Tanggal:** 9 Agustus 2026
 **Owner:** Denny Angesti Pratama
-**Status:** Draft — siap masuk tahap desain teknis
+**Status:** Implemented — dipakai sehari-hari oleh tim Deera, bukan lagi draft
 
-> **Catatan revisi v0.2:** Merevisi v0.1 setelah diskusi kebutuhan produksi
-> (lihat §22). Perubahan utama: satu kali generate menghasilkan **satu set
-> foto** (bukan satu gambar), background bervariasi mengikuti gaya produk
-> (bukan dikunci studio putih), warna kerudung & heels mengikuti warna produk
-> otomatis, dan **video ditunda ke fase 2**.
+> **CATATAN PENTING SEBELUM BACA LEBIH JAUH:** dokumen ini pernah ditulis
+> sebagai PRD *sebelum* development (v0.1–v0.5, riwayatnya diarsipkan di
+> §22 "Riwayat Keputusan"), dan sejak itu produknya **berpindah arsitektur
+> beberapa kali** selama development berjalan. Seluruh isi dokumen ini
+> (§1–§21) sudah ditulis ulang per 9 Agustus 2026 untuk mencerminkan
+> **apa yang sungguh-sungguh berjalan hari ini**, bukan rencana awal.
+> Kalau butuh alasan/proses di balik sebuah keputusan desain, cek §22 dan
+> riwayat chat — dokumen utama di bawah ini sengaja ditulis sebagai
+> "keadaan sekarang", bukan jurnal perubahan.
 >
-> **Catatan revisi v0.3:** Setelah riset perbandingan model AI, mesin utama
-> diganti dari FLUX.1 Kontext Pro + training LoRA menjadi **FLUX Virtual
-> Try-On (FLUX VTO)** — model dari Black Forest Labs yang dibuat khusus untuk
-> kasus "pakaikan produk ke foto model" dan secara eksplisit menjaga detail
-> pakaian (logo, print, jahitan) tetap utuh. Ini **menghilangkan kebutuhan
-> training LoRA sepenuhnya** untuk MVP — cukup pakai foto model biasa sebagai
-> referensi tiap generate. FLUX Kontext Pro / Nano Banana tetap dipakai
-> sebagai **tahap kedua opsional** untuk variasi background dan penambahan
-> aksesoris. Lihat §9 dan §22 untuk detail. Pose diputuskan terikat per
-> model, diisi dari arsip foto katalog vendor lama (Deera punya hak pakai
-> penuh).
+> **Tiga pivot terbesar dari rencana awal:**
+> 1. **Mesin AI**: bukan lagi FLUX Virtual Try-On + FLUX Kontext Pro
+>    (2 tahap terpisah) — sekarang **satu pemanggilan Nano Banana Pro**
+>    (`fal-ai/nano-banana-pro/edit`, Gemini 3 Pro Image) yang sekaligus
+>    memakaikan produk, mengatur background, dan aksesoris dalam satu
+>    generate. Terbukti jauh lebih akurat menjaga motif/tekstur produk
+>    lewat tes manual pemilik brand. Lihat §9.
+> 2. **Video AI**: semula "Out of Scope, ditunda ke V2" — sekarang **sudah
+>    live di V1**, baik di History/Generate ("video cerita gabungan": tiap
+>    foto dianimasikan lalu digabung jadi satu video) maupun di Content
+>    Studio (Reel Instagram). Lihat §7.8.
+> 3. **Content Studio ditambahkan**: fitur baru yang sama sekali tidak ada
+>    di rencana awal — generate caption/hashtag Instagram, poster
+>    bertipografi, "Foto Marketing AI" (restyle scene), "Foto Gabungan
+>    Produk AI" (gabung 2-5 model dalam 1 frame), dan publish langsung ke
+>    Instagram lewat Graph API. Lihat §7.9.
 >
-> **Catatan revisi v0.4:** Dua keputusan tambahan hasil diskusi lanjutan.
-> Pertama, tabel-tabel baru AI Fashion Studio (`models`, `poses`,
-> `generation_sets`, dst) ditaruh di **project Supabase Deera yang sudah
-> ada** — bukan project terpisah — supaya data produk (`products.kode`,
-> `warna`) bisa diakses langsung lewat foreign key, dan hasil generate bisa
-> dipush balik ke katalog Deera. Kedua, aksesoris diperluas cakupannya:
-> kerudung & heels tetap otomatis ikut warna produk (tanpa preset gaya),
-> sementara tas, kalung, cincin, dan anting jadi preset opsional yang bisa
-> dipilih admin. Lihat §7.4, §10, §12, dan §22.
->
-> **Catatan revisi v0.5:** Sistem background dirombak supaya tidak terasa
-> berulang. Kombinasi dua mekanisme: (1) library preset diperbesar jadi
-> 15-20+ tema mewah dengan **auto-rotasi & pencocokan** ke kategori/warna
-> produk (bukan admin pilih manual tiap kali), dan (2) mode **AI
-> Improvisasi** — server menyusun deskripsi background baru tiap generate
-> dari kombinasi elemen (material, mood, setting, warna aksen) yang
-> disesuaikan produk, tanpa perlu foto referensi tetap. Sistem otomatis
-> mencampur kedua mode ("auto"). Konsekuensi: tahap 2 (edit background)
-> praktis jadi default aktif untuk semua produk (bukan opsional lagi),
-> sehingga kapasitas bulanan diturunkan ke ~55 SKU/bulan dengan budget Rp
-> 500rb — **keputusan sadar untuk memprioritaskan kualitas visual**. Lihat
-> §3, §7.4, §7.6, §9, §12, §20.
+> Desain visual juga berubah total: dari rencana "light mode, warna brand
+> gold" menjadi **dark glassmorphism** (kaca gelap, blur, aksen gold) —
+> lihat §14.
 
 ---
 
 # 1. Ringkasan Produk
 
-AI Fashion Studio adalah aplikasi web internal untuk menghasilkan foto katalog
-gamis secara otomatis menggunakan AI, sebagai pengganti proses foto studio
-konvensional dengan vendor (studio + model + fotografer + editor).
+Deera Studio adalah aplikasi web internal untuk menghasilkan **foto dan
+video katalog** gamis/mukena secara otomatis menggunakan AI, sebagai
+pengganti sebagian besar proses foto studio konvensional dengan vendor
+(studio + model + fotografer + editor), DAN sebagai mesin pembuat konten
+marketing Instagram (caption, poster, foto editorial, video Reel).
 
-Alur inti: admin upload foto produk **raw flat-lay** (gamis difoto rata tanpa
-model) → sistem "pakaikan" produk itu ke foto model referensi lewat model AI
-virtual try-on (FLUX VTO), lalu opsional diperkaya background/aksesoris lewat
-tahap edit kedua — dengan wajah model tetap konsisten (karena berasal
-langsung dari foto referensi yang sama), dan warna kerudung/heels mengikuti
-warna produk — sambil menjaga detail kain, bordir, motif, dan siluet produk
-**identik dengan aslinya** (tidak ditambah atau dikurangi AI).
+Alur inti (Generate/History — lihat §7.6): admin upload foto produk
+**raw flat-lay** (gamis difoto rata tanpa model, beberapa sudut/detail) →
+sistem memanggil **satu model AI** (Nano Banana Pro) dengan foto model
+referensi + SEMUA foto produk + instruksi teks sekaligus → hasilnya foto
+model memakai produk itu, dengan background & aksesoris sesuai pilihan,
+dalam **satu pemanggilan**, sambil menjaga detail kain/bordir/motif/
+siluet produk **identik dengan aslinya**.
+
+Sebagai perluasan (Content Studio — lihat §7.9), admin juga bisa
+menghasilkan konten Instagram siap posting dari foto yang **sudah ada** di
+katalog (bukan generate ulang dari nol): caption+hashtag, poster
+bertipografi (headline gaya majalah fashion di atas foto), restyle foto
+jadi lebih editorial/lifestyle ("Foto Marketing AI"), gabungan beberapa
+model dalam satu frame ("Foto Gabungan Produk AI"), dan video pendek dari
+foto-foto itu — semuanya bisa langsung dipublish ke Instagram.
 
 Tujuan utama:
 * Mengurangi biaya foto studio vendor.
-* Mempercepat produksi katalog.
+* Mempercepat produksi katalog & konten marketing.
 * Menjaga konsistensi model, pose, dan kualitas visual.
-* Mempertahankan detail produk semaksimal mungkin — ini adalah **syarat mutlak**,
-  bukan preferensi.
+* Mempertahankan detail produk semaksimal mungkin — ini adalah **syarat
+  mutlak**, bukan preferensi.
+* Biaya AI tercatat akurat & transparan (lihat §18, §20) — bukan cuma
+  estimasi kasar.
 
 ---
 
 # 2. Latar Belakang
 
-Saat ini pembuatan foto katalog Deera menggunakan vendor eksternal — studio,
-model, dan fotografer mereka. Untuk brand dengan banyak SKU, proses ini lambat,
-mahal, dan sulit dijadwalkan ulang setiap ada produk baru.
+Sebelum ada Deera Studio, pembuatan foto katalog Deera menggunakan vendor
+eksternal — studio, model, dan fotografer mereka. Untuk brand dengan
+banyak SKU, proses ini lambat, mahal, dan sulit dijadwalkan ulang setiap
+ada produk baru. Konten marketing Instagram juga dibuat manual (foto studio
+dipakai apa adanya, caption ditulis manual).
 
-AI Fashion Studio ditujukan sebagai mesin produksi katalog berbasis AI:
-input-nya foto produk flat-lay yang sudah rutin dikerjakan tim internal,
-output-nya adalah **set foto siap upload** ke marketplace/website — tanpa
-tergantung jadwal vendor.
+Deera Studio jadi mesin produksi katalog **dan** konten marketing berbasis
+AI: input-nya foto produk flat-lay yang sudah rutin dikerjakan tim
+internal, output-nya adalah **set foto siap upload** ke marketplace/website
+DAN **konten Instagram siap posting** — tanpa tergantung jadwal vendor
+atau kemampuan menulis copy marketing.
 
 ---
 
 # 3. Tujuan Bisnis
 
-## KPI MVP (3 bulan)
+Target awal MVP (§3 versi lama) memakai proyeksi harga FLUX VTO+Kontext
+yang sudah tidak relevan sejak pivot ke Nano Banana Pro (§9). Angka biaya
+aktual & kapasitas real per fitur ada di §20 — ringkasnya:
 
-* Waktu produksi satu **set foto** (5 gambar) per SKU < 5 menit end-to-end.
-* Minimal 70% hasil langsung layak upload tanpa edit manual.
-* Pengurangan biaya foto studio vendor minimal 50%.
-* Mampu memproses minimal **~55 SKU per bulan** dengan budget Rp 500.000
-  (revisi v0.5, lihat §20) — angka ini lebih kecil dari perkiraan v0.3/v0.4
-  (80–100 SKU) karena keputusan sadar untuk memprioritaskan **kualitas
-  visual** (background bervariasi & mewah di setiap produk) di atas volume.
-  Kapasitas bisa naik ke ~100 SKU/bulan lagi kalau budget ditambah ke ~Rp
-  900.000/bulan, atau kalau sebagian produk memakai background dari pool
-  yang lebih sering diulang.
-
-> Catatan riwayat: v0.2 sempat menurunkan target ke 50-70 SKU karena biaya
-> training LoRA. v0.3/v0.4 menaikkannya lagi ke 80-100 SKU/bulan setelah
-> LoRA dihapus. **v0.5 menurunkannya lagi secara sadar** — bukan karena
-> constraint teknis, tapi karena keputusan bisnis: background variatif &
-> mewah di *setiap* produk (§7.4) butuh tahap 2 (edit background) hampir
-> selalu aktif, yang menaikkan biaya per produk. Kualitas dipilih di atas
-> volume untuk MVP. Lihat §20 untuk rincian biaya.
+* Foto katalog per SKU (foto utama + foto detail + foto angle tambahan
+  opsional) **selesai dalam hitungan menit**, bukan menunggu jadwal
+  vendor.
+* Biaya nyata per foto ~Rp 2.700 (Nano Banana Pro, generate penuh) atau
+  ~Rp 640 (Kontext, cuma crop detail dari foto yang sudah ada) — jauh
+  lebih murah dari sesi foto studio vendor per SKU.
+* Sejak Agustus 2026, **semua biaya AI (foto, video, teks Content
+  Studio) tercatat otomatis** lewat `ai_cost_log` (§18) dan tampil di
+  Dashboard (§14) — bukan lagi estimasi kasar per bulan seperti
+  rencana awal, tapi angka riil per panggilan API.
+* Video & Content Studio menambah kapasitas biaya bulanan (di luar
+  proyeksi awal yang cuma menghitung foto) — lihat §20 untuk rincian
+  per fitur.
 
 ---
 
-# 4. Scope MVP
+# 4. Scope (Implemented)
 
-## In Scope
+## Sudah Live
 
-* Login admin.
-* Upload model AI (foto referensi model — tanpa training, langsung siap pakai).
-* Upload pose referensi.
-* Upload produk (foto flat-lay: depan, belakang, detail bordir, detail lengan).
-* **Generate satu set foto per produk**: 1 foto utama + 3 foto detail + 1 foto
-  seri (jika produk punya varian seri/motif berbeda).
-* Pemilihan background per produk (preset, disesuaikan gaya gamis).
-* Warna kerudung & heels otomatis mengikuti warna produk (dari field `warna`).
-* Aksesoris pelengkap (tas, dll) sebagai preset opsional untuk mempercantik foto.
-* Menyimpan hasil generate (per set, bukan per gambar lepas).
-* Download hasil (per gambar atau seluruh set).
-* Riwayat generate, dikelompokkan per produk (SKU).
+* Login admin (reuse Supabase Auth Deera, akun `@deera.id` yang sama
+  dengan admin.deera.id).
+* Manajemen model AI (foto referensi, tanpa training).
+* Manajemen pose per model (foto referensi, boleh dari arsip vendor lama).
+* Manajemen preset background & aksesoris, dengan gambar referensi &
+  kemampuan edit (termasuk tambah/ganti gambar preview) — lihat §7.4.
+* Upload produk (foto flat-lay: depan, belakang, dan 6 slot detail
+  opsional — dada, leher, lengan, **tangan/manset**, kelim, badan penuh).
+* **Generate satu set foto per produk** dalam satu pemanggilan Nano Banana
+  Pro per gambar: 1 foto utama (wajib), N foto "angle lain" (pose berbeda,
+  opsional, jumlah diatur admin), N foto "detail" (crop close-up,
+  diturunkan dari foto utama lewat Kontext, murah), dan N foto "seri"
+  (varian warna lain dari produk yang sama, masing-masing digenerate
+  penuh dari 1 foto asli per warna yang diupload admin).
+* Publish hasil terpilih ke katalog Deera (`products.image`/`detail`/
+  `warna_images`) lewat Cloudinary.
+* **Video "cerita gabungan"** (History/Generate) — semua foto hasil
+  generate yang dipilih admin dianimasikan jadi klip pendek (motion
+  berbeda tergantung apakah foto itu badan-penuh atau close-up detail),
+  lalu digabung urut jadi satu video utuh. Lihat §7.8.
+* **Content Studio** (`/content`) — generate caption+hashtag, poster
+  bertipografi, restyle foto ("Foto Marketing AI"), gabungan multi-produk
+  ("Foto Gabungan Produk AI"), video Reel, kalender konten bulanan, dan
+  publish otomatis ke Instagram lewat Graph API. Lihat §7.9.
+* Pencatatan biaya AI terpusat (`ai_cost_log`) + Dashboard dengan
+  rincian biaya per fitur, biaya bulan ini vs sepanjang waktu, dan daftar
+  item yang gagal/perlu perhatian. Lihat §14, §18.
+* Riwayat generate dengan **pagination + search** (server-side, bukan
+  cuma limit 50 tanpa filter seperti versi awal).
 
-## Out of Scope (V2+)
+## Belum Diimplementasi (tetap di roadmap, lihat §19)
 
-* **Video AI ("video cantik")** — dipindah ke fase 2 (lihat §19), setelah
-  workflow foto stabil dan budget bertambah.
 * Batch generate (generate banyak SKU sekaligus dalam satu antrian).
-* Auto QC AI (deteksi otomatis kualitas hasil sebelum ditampilkan ke admin).
+* Auto QC AI (deteksi otomatis kualitas hasil sebelum ditampilkan ke
+  admin).
 * Integrasi marketplace (auto-upload ke Shopee/Tokopedia dll).
 * Multi-user role (approval workflow, role reviewer terpisah).
-* Mobile app.
-* Auto-resize ke berbagai format marketplace (V3).
+* Mobile app native (web app sudah responsive mobile).
+* Auto-resize ke berbagai format marketplace.
+* Monitoring/error-tracking terpusat (Sentry dsb) — saat ini error cukup
+  ditangkap & ditampilkan ke admin (toast) + `console.error` di server,
+  belum ada dashboard monitoring eksternal.
 
 ---
 
@@ -143,45 +164,63 @@ tergantung jadwal vendor.
 
 ## Admin Brand
 
-* Mengelola model AI (upload foto referensi, aktivasi/nonaktifkan).
-* Mengelola pose.
-* Mengelola preset background & aksesoris.
-* Melakukan generate set foto katalog.
+* Mengelola model AI, pose, dan preset background/aksesoris.
+* Melakukan generate set foto & video katalog.
+* Mengelola Content Studio: generate & publish konten Instagram.
+* Memantau biaya AI lewat Dashboard.
 
 ## Tim Konten
 
 * Upload produk baru (foto flat-lay).
-* Memilih background/aksesoris saat generate (atau pakai auto-suggest).
-* Mengunduh hasil.
-* Mengunggah ke marketplace (manual, di luar sistem ini untuk MVP).
+* Memilih background/aksesoris saat generate.
+* Generate & jadwalkan konten Instagram dari produk yang sudah ada di
+  katalog.
+* Mengunduh hasil / publish ke katalog & Instagram.
 
 ---
 
 # 6. User Journey
 
-1. Login.
-2. **(Setup awal, sekali per model)** Buka halaman **Models** → buat entri
-   model → buka halaman **Poses**, upload beberapa foto pose untuk model itu
-   (bisa langsung pakai foto katalog lama dari vendor, karena Deera punya hak
-   pakai penuh — tidak perlu foto ulang). Tanpa training, langsung siap
-   dipakai begitu tersimpan.
-3. Buka halaman **Generate**.
-4. Pilih model.
-5. Pilih pose (salah satu foto pose milik model itu).
-6. Pilih background (preset sesuai gaya produk) — bisa auto-suggest berdasar
-   kategori produk.
-7. Upload foto flat-lay produk (depan, belakang, detail — sesuai naming
-   convention §23).
-8. Sistem otomatis membaca warna produk untuk menentukan warna kerudung & heels.
-9. (Opsional) Pilih aksesoris pelengkap (tas, dll).
-10. Klik **Generate Set**.
-11. Sistem memproses **tahap 1** (FLUX VTO — pakaikan produk ke foto model)
-    untuk foto utama dulu → lalu 3 foto detail → lalu foto seri (jika ada),
-    lalu **tahap 2** (edit background/aksesoris bila dipilih) — status per
-    gambar terlihat (queued/processing/completed).
-12. Hasil set foto muncul (5 gambar).
-13. Admin review, generate ulang gambar tertentu jika belum pas, lalu download
-    atau simpan.
+## A. Foto & video katalog (Generate/History)
+
+1. Login (`/login`, auto-suffix `@deera.id`).
+2. **(Setup awal, sekali per model)** Buka `/models` → buat entri model →
+   buka `/poses`, upload beberapa foto pose untuk model itu.
+3. Buka `/generate`. Pilih produk dari katalog Deera (browse dengan
+   gambar, bukan input kode manual), pilih model, pilih pose utama +
+   opsional pose "angle lain" tambahan, pilih background (preset atau
+   custom), pilih aksesoris.
+4. Upload foto flat-lay produk (depan wajib, sisanya opsional termasuk
+   slot **Detail Tangan** yang terpisah dari Detail Lengan).
+5. Atur jumlah foto detail & seri yang mau digenerate (kontrol biaya).
+6. Klik **Generate Set** — sistem memanggil Nano Banana Pro per foto
+   utama/angle/seri, dan Kontext untuk tiap foto detail (crop dari foto
+   utama). Status per gambar terlihat real-time.
+7. Hasil set foto muncul. Admin review, generate ulang gambar tertentu
+   kalau belum pas.
+8. **(Opsional)** Klik "Generate Video" — semua foto terpilih diurutkan
+   sesuai cerita yang diinginkan, dianimasikan jadi klip, digabung jadi
+   satu video, dengan progress bisa dipantau kapan saja (termasuk setelah
+   pindah halaman lalu balik lagi).
+9. Klik **Publish** untuk push hasil terpilih ke `products.image`/
+   `detail`/`warna_images` — langsung muncul di catalog.deera.id.
+
+## B. Konten Instagram (Content Studio)
+
+1. Buka `/content`. Pilih 1-5 produk yang sudah ada di katalog (foto
+   sudah pernah dipublish dari alur A, atau foto asli produk).
+2. Pilih tema (highlight produk, tips styling, brand story, promo, atau
+   brand awareness) dan tipe konten (feed 1 foto, carousel, atau reel).
+3. **(Opsional)** Panel Poster AI: minta AI menyarankan headline/subtitle/
+   caption bar bawah + arahan scene, generate "Foto Marketing AI" (restyle
+   1 foto jadi lebih editorial) atau "Foto Gabungan Produk AI" (kalau
+   pilih 2-5 produk sekaligus), lalu render poster bertipografi di atas
+   hasilnya.
+4. Generate caption + hashtag dari data produk asli (anti-halusinasi —
+   AI tidak boleh mengarang fakta produk).
+5. **(Kalau reel)** Generate video dari foto-foto yang dipilih.
+6. Simpan sebagai draft, jadwalkan (`scheduled_at`), atau publish
+   langsung ke Instagram (kalau sudah setup Graph API, lihat README).
 
 ---
 
@@ -189,270 +228,214 @@ tergantung jadwal vendor.
 
 ## 7.1 Authentication
 
-* Login email + password.
-* Session menggunakan Supabase Auth — **project sama dengan Deera** (§10),
-  jadi admin bisa pakai akun yang sama dengan admin.deera.id tanpa perlu
-  daftar ulang. Perlu dicek saat implementasi apakah semua akun admin Deera
-  otomatis punya akses, atau dibatasi lewat role/claim tambahan.
+* Login email + password, reuse Supabase Auth Deera (project sama,
+  akun `@deera.id` yang sama dengan admin.deera.id).
+* Route protection via `middleware.ts` + `ProtectedRoute` — redirect ke
+  `/login` kalau belum autentikasi.
 
-## 7.2 Model Management (revisi v0.3 — tanpa training, cukup foto referensi)
+## 7.2 Model Management
 
-> **Perubahan dari v0.2:** Karena mesin utama sekarang FLUX VTO (§9), model
-> tidak perlu dilatih (tidak ada LoRA). Cukup upload beberapa foto model
-> sebagai referensi — foto itu langsung dipakai sebagai "Human Image" di
-> setiap generate. Konsistensi wajah terjaga karena FLUX VTO memang
-> mempertahankan orang di foto input apa adanya, bukan dari hasil training.
+Tanpa training — foto referensi model dipakai langsung sebagai salah
+satu `image_urls` di panggilan Nano Banana Pro tiap generate.
 
-### Fields
-
-* id
-* name
-* thumbnail_url
-* is_active
+### Fields (`ai_models`)
+id, name, thumbnail_url, is_active, created_at.
 
 ### Actions
+Create, Update (termasuk edit inline dari halaman `/models`), Delete,
+Activate/Deactivate.
 
-* Create
-* Update
-* Delete
-* Activate/Deactivate
+## 7.3 Pose Management
 
----
+Pose terikat ke `model_id` tertentu — satu "pose" adalah foto sungguhan
+dari model itu dalam pose tersebut, dipakai sebagai salah satu foto
+referensi identitas di panggilan Nano Banana Pro (§9).
 
-## 7.3 Pose Management (revisi v0.3 — pose kini terikat per model, bukan generik)
-
-> **Perubahan penting dari v0.1/v0.2:** Di FLUX VTO, identitas model dan pose
-> menyatu dalam satu foto (`human_image`) — tidak seperti rencana LoRA lama
-> di mana wajah dikunci lewat training dan pose diatur bebas lewat prompt.
-> Artinya satu "pose" harus berupa **foto sungguhan dari model tersebut**
-> dalam pose itu, bukan referensi pose generik yang bisa dipakai model
-> manapun. Karena itu `poses` sekarang selalu terikat ke `model_id` tertentu.
->
-> **Keputusan (hasil diskusi):** karena Deera punya hak pakai penuh atas
-> foto-foto katalog lama dari vendor, foto-foto itu bisa langsung dipakai
-> sebagai isi awal pose library per model — tidak perlu foto ulang. Admin
-> tinggal upload beberapa foto lama terbaik (variasi pose/gestur) dari model
-> yang sama, dan FLUX VTO akan mengganti pakaian di foto itu dengan produk
-> baru, sambil mempertahankan wajah, pose, dan background studio aslinya.
-> Foto pose baru (real atau AI-generated) baru diperlukan kalau suatu saat
-> butuh variasi pose di luar yang sudah ada di foto lama.
-
-### Fields
-
-* id
-* model_id (wajib — pose ini adalah foto model tertentu, bukan generik)
-* name (mis. "Duduk Sofa Tangan Dagu", "Berdiri Depan Rak")
-* reference_image_url — foto model dalam pose ini (boleh dari katalog vendor
-  lama, karena Deera punya hak pakai penuh)
-* description
-* is_active
+### Fields (`ai_poses`)
+id, model_id, name, reference_image_url, description, is_active,
+created_at.
 
 ### Actions
+Upload (terikat ke satu model), edit inline, delete, activate/deactivate.
+Dipilih di `/generate` lewat grid gambar (bukan dropdown teks).
 
-* Upload pose (terikat ke satu model)
-* Edit nama/deskripsi
-* Delete
-* Activate/Deactivate
+## 7.4 Background & Accessory
 
----
+Preset dikurasi manual oleh admin, masing-masing dengan gambar referensi
+opsional yang sekarang **bisa diedit setelah dibuat** (tombol Edit per
+kartu, termasuk ganti gambar) — sebelumnya preset lama yang dibuat tanpa
+gambar tidak punya cara ditambahkan gambarnya belakangan; sudah diperbaiki.
 
-## 7.4 Background & Accessory (revisi v0.5 — background dinamis, dua mode)
+Form tambah preset (`/presets`) memakai layout upload-di-kiri + field-di-
+kanan (flex-between), bukan dropzone raksasa yang mendominasi form seperti
+versi awal.
 
-> **Cakupan aksesoris (hasil diskusi v0.4, tidak berubah):** kerudung dan
-> heels **tidak** masuk sistem preset — warnanya otomatis mengikuti warna
-> produk lewat prompt tahap 2 (§7.6), tanpa pilihan gaya. Yang masuk preset
-> opsional adalah aksesoris pelengkap: tas, kalung, cincin, anting.
->
-> **Background (hasil diskusi v0.5):** supaya tidak terasa berulang dan
-> tetap terasa mewah/menyesuaikan tiap produk, sistem punya **dua mode**
-> yang bisa dicampur:
->
-> **Mode Preset (terkurasi)** — library 15-20+ tema mewah yang dikurasi
-> Denny/admin sekali di awal (mis. "Marmer & Emas", "Taman Golden Hour",
-> "Butik Velvet Dusty Rose", "Teras Mediterania", "Lounge Kaca Patri").
-> Setiap preset punya tag mood & warna yang cocok, dan sistem **auto-rotasi**
-> — menghindari memakai preset yang sama berturut-turut untuk kategori
-> produk yang sama, dan **auto-matching** — memprioritaskan preset yang
-> warna/mood-nya selaras dengan produk.
->
-> **Mode AI Improvisasi** — tanpa foto referensi tetap, server menyusun
-> deskripsi background baru tiap generate dari kombinasi elemen: material
-> (marmer, beludru, kayu jati, kaca patri, satin), mood/pencahayaan (golden
-> hour, cahaya lembut pagi, dramatis malam hari), setting (lounge, teras,
-> taman, butik, kamar pengantin), dan warna aksen yang diselaraskan dengan
-> `products.warna`. Kombinasi ini menghasilkan ribuan variasi tanpa perlu
-> foto referensi baru — cukup teks prompt yang disusun otomatis, tidak
-> butuh panggilan AI/LLM tambahan (hemat biaya & latensi).
->
-> **Mode Auto (default, hasil keputusan)** — sistem mencampur kedua mode
-> di atas secara otomatis tiap generate (mis. rasio acak 60% preset / 40%
-> improvisasi, bisa disetel), supaya hasil tetap terkontrol kualitasnya
-> (dari mode preset) sekaligus variatif (dari mode improvisasi). Admin
-> tetap bisa override manual pilih salah satu mode atau preset spesifik
-> kalau mau kontrol penuh untuk produk tertentu.
+### Fields — `ai_background_presets`
+id, name, prompt_fragment, reference_image_url, mood_tags (jsonb),
+warna_affinity (jsonb), cocok_untuk_kategori (jsonb), last_used_at,
+use_count, is_active, created_at.
 
-### Fields — `background_presets`
+### Fields — `ai_accessory_presets`
+id, category (`tas`|`kalung`|`cincin`|`anting`), name, prompt_fragment,
+reference_image_url, is_active, created_at.
 
-* id
-* name (mis. "Marmer & Emas", "Taman Golden Hour")
-* prompt_fragment — deskripsi lengkap untuk disisipkan ke prompt tahap 2
-* reference_image_url (opsional — kalau ada foto acuan visual)
-* mood_tags — array (mis. `["mewah","romantis","hangat"]`) untuk matching
-* warna_affinity — array warna yang cocok (mis. `["pink","dusty rose","cream"]`)
-* cocok_untuk_kategori — tag kategori produk (mis. "Gamis Jumbo") untuk auto-suggest
-* last_used_at, use_count — untuk logika rotasi (hindari pemakaian berturut-turut)
-* is_active
-
-### Fields — `accessory_presets`
-
-* id
-* category — `tas` \| `kalung` \| `cincin` \| `anting`
-* name (mis. "Tas Clutch Gold", "Kalung Mutiara Simple", "Anting Bulat Gold")
-* reference_image_url atau prompt_fragment
-* is_active
+Kerudung & heels **tidak** punya tabel preset — warnanya otomatis
+mengikuti `products.warna` lewat instruksi teks di prompt Nano Banana
+Pro, tanpa pilihan gaya.
 
 ### Actions
-
-* CRUD standar untuk `background_presets` & `accessory_presets`.
-* Sistem pilih background otomatis (mode Auto) saat generate, dengan opsi
-  admin override ke mode/preset spesifik.
-* Admin bisa pilih lebih dari satu aksesoris (lintas kategori), mis. tas +
-  kalung sekaligus, tapi disarankan maksimal 1 preset per kategori supaya
-  tidak menumpuk terlalu ramai di satu foto.
-
----
+CRUD standar + edit inline gambar/field per kartu preset. Thumbnail
+preset ditampilkan di halaman Generate supaya admin bisa lihat kira-kira
+bentuknya sebelum memilih (sebelumnya cuma pill teks tanpa gambar).
 
 ## 7.5 Product Upload
 
 ### Minimum
+Foto depan (flat-lay).
 
-* Foto depan (flat-lay).
-
-### Optional
-
-* Foto belakang.
-* Detail bordir.
-* Detail lengan.
+### Optional (6 slot detail)
+Foto belakang, badan penuh, detail dada, detail leher, detail lengan
+(bahu/lengan atas), **detail tangan** (manset/pergelangan tangan — SLOT
+TERPISAH dari detail lengan, ditambahkan Agustus 2026 karena keduanya
+area yang jelas berbeda secara visual).
 
 ### Validasi
+JPG/PNG/WebP, upload lewat dropzone (`react-dropzone`) langsung ke
+Supabase Storage dari browser — tidak ada lagi ketergantungan pada
+naming convention file lokal seperti rencana awal (§23 lama sudah usang).
 
-* JPG/PNG.
-* Maks 10 MB.
+## 7.6 Generate Photo Set
 
-### Naming convention (lihat §23)
-
-Tetap mengikuti pola `AGM-{kode}-front.jpg`, `-back.jpg`, `-detail-neck.jpg`,
-`-detail-sleeve.jpg` — detail foto ini penting sebagai referensi tambahan agar
-AI mempertahankan tekstur & motif secara akurat.
-
----
-
-## 7.6 Generate Photo Set (revisi besar dari "Generate Image")
-
-**Perubahan penting:** satu kali generate menghasilkan **satu set foto**
-(1 utama + 3 detail + 1 seri, total 5 gambar), bukan 1 gambar per request
-seperti di v0.1. Ini karena kebutuhan produksi katalog nyata butuh set foto
-lengkap per SKU, bukan gambar lepas.
+**Arsitektur final ("Opsi B"):** SATU pemanggilan Nano Banana Pro per
+foto utama/angle/seri (bukan dua tahap VTO+Kontext terpisah seperti
+rencana awal). Kontext tetap dipakai, tapi HANYA untuk foto "detail"
+(crop/zoom murni dari foto utama yang sudah jadi — bukan re-render
+produk dari nol), karena operasi reframe itu murah & tidak butuh model
+sekuat Nano Banana Pro.
 
 ### Input
+model_id, pose_id (utama) + anglePoseIds (opsional, array pose tambahan
+untuk foto "angle lain"), background_mode (`auto`|`preset`|
+`ai_improvised`), background_preset_id, accessory_preset_ids,
+product_images (front + hingga 7 slot opsional termasuk detailHand),
+product_warna, jumlah foto detail & seri yang diinginkan.
 
-* model_id (foto referensi model, tanpa syarat training)
-* pose_id
-* background_mode — `auto` (default) \| `preset` \| `ai_improvised` (§7.4)
-* background_preset_id (opsional — dipakai kalau mode `preset` atau saat
-  mode `auto` memilih jatuh ke preset)
-* accessory_preset_ids (opsional, array)
-* product_images (foto flat-lay: front, back, detail-neck, detail-sleeve)
-* product_warna (diambil otomatis dari data produk untuk warna kerudung/heels)
+### Peran tiap image_role (lihat `types/database.ts`)
+* `utama` — foto badan penuh, pose utama. Full pass Nano Banana Pro.
+* `angle` — foto badan penuh, pose LAIN dari model yang sama (generate
+  independen, full pass Nano Banana Pro juga).
+* `detail` — crop close-up (kerah/lengan/bordir), DITURUNKAN dari foto
+  utama via Kontext (murah, ~Rp 640/foto vs ~Rp 2.700/foto full pass).
+* `seri` — varian WARNA lain dari produk yang sama. Bukan lagi recolor
+  tebakan AI dari foto utama — admin upload SATU foto full-body asli per
+  warna varian (`variant_product_images`), lalu digenerate FULL & independen
+  lewat Nano Banana Pro dengan pose sama seperti utama, sambil reuse foto
+  warna utama sebagai referensi bentuk/tekstur/bordir.
 
-### Proses — dua tahap per gambar
+### Prompt Nano Banana Pro (garis besar, lihat `lib/prompts/nano-banana-generate.ts`)
+Dikirim: foto pose target, 1-2 foto pose LAIN dari model yang sama
+(penguat identitas), SEMUA foto produk yang diupload apa adanya (tanpa
+compositing), deskripsi background (dari preset atau AI improvisasi),
+instruksi warna kerudung/heels ikut `productWarna`, fragment aksesoris
+terpilih. Instruksi eksplisit menjaga wajah/identitas model dan
+detail/tekstur/motif produk **identik**, sambil bebas menyesuaikan
+pose/framing sesuai kebutuhan foto.
 
-**Tahap 1 — FLUX VTO (wajib, garment fidelity):** foto model referensi +
-foto produk flat-lay → hasil model memakai produk, dengan detail
-kain/bordir/motif dijaga oleh model VTO itu sendiri (purpose-built untuk
-ini, lihat §9).
+### Output — per gambar (`ai_generations`)
+output_image_url, vto_image_url (kolom lama, sekarang diisi sama dengan
+output_image_url karena tidak ada lagi tahap terpisah), has_stage2,
+status, image_role, generation_time_ms, cost, error_message,
+video_url/video_status/video_cost (opsional, lihat §7.8).
 
-**Tahap 2 — Edit background & aksesoris (revisi v0.5 — default aktif,
-bukan opsional lagi):** hasil tahap 1 diproses lagi lewat FLUX Kontext Pro
-atau Nano Banana untuk mengganti seluruh background (bukan sekadar
-menambah elemen) dan/atau menambahkan aksesoris, tanpa mengubah produk yang
-sudah presisi dari tahap 1. Server dulu menentukan background lewat mode
-Auto (§7.4) — pilih dari preset library atau susun deskripsi improvisasi —
-sebelum memanggil Kontext Pro/Nano Banana. Karena setiap produk sekarang
-selalu dapat background yang disesuaikan (bukan opsional), tahap ini
-praktis berjalan di hampir semua generate — lihat dampak biaya di §20.
+## 7.7 Generation History
 
-Urutan generate dalam satu set:
+`/history` — dikelompokkan per **photo set** (`ai_generation_sets`),
+dengan **pagination server-side (10/halaman) + search kode produk**
+(server-side `.ilike()`/`.range()`, bukan lagi `.limit(50)` client-side
+tanpa filter seperti versi awal yang bikin riwayat lama "hilang" dari
+tampilan).
 
-1. **Foto utama** — full body, pose utama, background terpilih. Generate
-   dulu karena jadi acuan visual untuk foto lain dalam satu set.
-2. **3 foto detail** — crop/fokus ke area tertentu (kerah, lengan, motif
-   bordir), pakai foto detail flat-lay sebagai referensi tambahan supaya
-   tekstur presisi.
-3. **1 foto seri** (kondisional — hanya jika produk punya varian
-   warna/motif seri) — variasi warna dari foto utama.
+Tiap set menampilkan: tanggal, model, pose, produk, status keseluruhan
+(`queued`/`processing`/`completed`/`partial`/`failed`), thumbnail semua
+hasil, biaya generate, dan status video (kalau pernah diminta).
 
-### Output — per gambar
+Admin bisa generate ulang gambar tertentu, tambah warna seri baru tanpa
+mengulang seluruh set, dan generate/publish video cerita gabungan.
 
-* generated_image_url (hasil akhir setelah tahap 1 + tahap 2 jika ada)
-* vto_image_url (hasil tahap 1, sebelum edit background — disimpan juga
-  sebagai fallback/audit kalau tahap 2 gagal)
-* generation_time_ms
-* status: `queued` \| `processing` \| `completed` \| `failed`
-* image_role: `utama` \| `detail` \| `seri`
+## 7.8 Video Generation (BARU — sebelumnya Out of Scope MVP)
 
-### Prompt Tahap 1 — FLUX VTO
+Dipakai di History/Generate (per set foto) DAN Content Studio (per post,
+khusus tipe "reel"). Model: Kling 3.0 Pro image-to-video
+(`fal-ai/kling-video/v3/pro/image-to-video`).
 
-Input model ini bukan prompt panjang seperti Kontext Pro, melainkan
-`human_image` (foto model) + `garment_image` (foto produk) + prompt singkat
-opsional untuk arahan pose/framing:
+### Alur
+1. Admin pilih foto-foto mana saja (urut sesuai cerita yang diinginkan)
+   dan durasi per klip (3-15 detik, default 5).
+2. Tiap foto disubmit sebagai 1 job klip terpisah lewat `fal.queue`
+   (async, bukan blocking) — supaya progress asli bisa dipantau dan
+   admin bisa pindah halaman lalu kembali tanpa kehilangan progress.
+3. Tiap klip dianimasikan dengan **motion prompt berbeda tergantung
+   `image_role`** foto sumbernya (§7.6): foto badan-penuh (utama/angle/
+   seri) dapat instruksi "model berputar anggun ala lookbook", foto
+   detail dapat instruksi "kamera pan/zoom pelan menelusuri tekstur" —
+   BUKAN lagi satu motion prompt yang sama dipaksakan ke semua klip
+   (masalah versi awal: instruksi "kain bergoyang" yang pas untuk foto
+   badan penuh terasa aneh dipakai apa adanya di foto close-up kancing).
+4. Setelah semua klip selesai, digabung URUT jadi satu video utuh lewat
+   `fal-ai/ffmpeg-api/merge-videos` (gratis, operasi ffmpeg murni bukan
+   model AI).
+5. Hasil akhir disimpan (`ai_generation_sets.video_url` untuk History,
+   dikembalikan ke client apa adanya untuk Content Studio karena draft
+   yang belum disimpan tidak punya baris DB permanen).
 
-```
-A natural front-facing studio shot. The garment is worn as designed,
-preserving original fabric texture, embroidery, stitching, and proportions.
-```
+### Batasan
+Kling 3.0 Pro membatasi `duration` 3-15 detik PER KLIP (bukan per video
+gabungan) — total durasi video akhir = jumlah durasi semua klip. Tanpa
+audio (`generate_audio: false`, sesuai permintaan admin).
 
-### Prompt Tahap 2 — FLUX Kontext Pro / Nano Banana (revisi v0.5)
+## 7.9 Content Studio (BARU — tidak ada di rencana awal)
 
-```
-Replace the entire background with: {background_description}. Preserve the
-person, the garment, pose, and all garment details exactly as in the input
-image. Hijab color and heels color must match the garment's primary color:
-{warna}. Add accessory if specified: {accessory_preset}.
-```
+`/content` — generate konten marketing Instagram dari foto produk yang
+**sudah ada** di katalog Deera (bukan generate ulang dari nol).
 
-`{background_description}` diisi dengan salah satu dari dua sumber,
-ditentukan oleh `background_mode`:
+### Fitur
+* **Caption + hashtag** — `generateCaption()`, 5 tema (highlight produk,
+  tips styling, brand story, promo, brand awareness), gaya storytelling
+  bukan copy jualan keras. Anti-halusinasi ketat: hanya boleh pakai fakta
+  produk yang benar-benar dikirim.
+* **Poster AI** — AI menyarankan headline pendek gaya majalah fashion
+  (`suggestHeadline()`) + subtitle + caption bar bawah + arahan scene,
+  di-render langsung di atas foto jadi 1 poster PNG (`next/og`
+  `ImageResponse`, font Fraunces/Alex Brush/Poppins, logo Deera asli di
+  kiri atas, warna swatch opsional).
+* **Foto Marketing AI** — restyle 1 foto produk yang sudah ada jadi lebih
+  editorial/lifestyle (`generateMarketingPhoto()`, Nano Banana Pro edit,
+  $0.15/panggilan) — wajah/pose/garment dikunci ketat, background/mood
+  yang berubah sesuai `sceneIdea` dari AI atau admin. Bisa per-slide untuk
+  carousel, dengan storyboard AI (`suggestStoryboard()`) yang merancang
+  alur cerita lintas slide supaya tidak terasa acak.
+* **Foto Gabungan Produk AI** — generalisasi ke 2-5 produk sekaligus
+  (`generateComboPhoto()`), menggabungkan beberapa foto model+produk yang
+  terpisah jadi SATU frame baru seolah difoto bersama. Storyboard grup
+  (`suggestGroupStoryboard()`) merancang alur cerita kebersamaan lintas
+  beberapa frame.
+* **Video Reel** — sama seperti §7.8, tapi stateless (progress disimpan
+  di state client sampai admin klik "Simpan Draft").
+* **Kalender konten** — generate rencana beberapa post sekaligus, rotasi
+  produk x tema.
+* **Publish ke Instagram** — lewat Graph API (`lib/instagram/client.ts`),
+  butuh akun Instagram Professional + Meta Developer App + App Review
+  (proses Meta, di luar kendali aplikasi ini, lihat README). Rate limit
+  25 post/24 jam, Reels butuh video asli, Stories tidak bisa dipublish
+  lewat Graph API.
+* **Riwayat konten** (`/content`, panel "Semua Konten") — **pagination +
+  search** server-side, sama seperti History (§7.7).
 
-* **Preset:** isi dari `background_presets.prompt_fragment` (mis. "interior
-  mewah bernuansa marmer putih dengan aksen emas, pencahayaan lembut sore
-  hari").
-* **AI Improvisasi:** disusun server dari kombinasi elemen (§7.4), contoh
-  hasil komposisi: "*teras mediterania dengan lantai marmer krem, tirai
-  linen tertiup angin, pencahayaan golden hour, aksen warna senada dusty
-  pink*" — disusun otomatis dari `products.warna` + kategori produk tanpa
-  panggilan AI/LLM tambahan (murni templating di server, hemat biaya).
-
-Bagian `{warna}`, `{background_description}`, `{accessory_preset}` diisi
-otomatis dari data produk dan hasil pemilihan mode — kedua prompt dasar ini
-disimpan di server dan tidak dapat diubah pengguna biasa.
-
----
-
-## 7.7 Generation History (revisi — per set, bukan per gambar)
-
-Menampilkan, dikelompokkan per **photo set**:
-
-* tanggal
-* model
-* pose
-* produk (kode & nama)
-* status keseluruhan set (mis. "4/5 selesai")
-* thumbnail 5 hasil (utama + detail + seri)
-* biaya generate (Rp, untuk kontrol budget)
-
-Admin bisa generate ulang gambar tertentu dalam satu set tanpa mengulang
-seluruh set (mis. foto detail kurang pas, generate ulang foto itu saja).
+### Fields (`content_posts`)
+id, product_kode, secondary_product_kodes (jsonb, untuk mode grup),
+image_urls, content_type, theme, caption, hashtags, extra_notes,
+scheduled_at, status (`draft`|`scheduled`|`published`|`failed`),
+instagram_media_id, published_at, error_message, video_url, created_at.
 
 ---
 
@@ -461,148 +444,145 @@ seluruh set (mis. foto detail kurang pas, generate ulang foto itu saja).
 | Item          | Target                    |
 | ------------- | ------------------------- |
 | Response UI   | < 300 ms                  |
-| Generate time tahap 1 (FLUX VTO) per gambar | < 4 detik (klaim resmi Black Forest Labs) |
-| Generate time tahap 2 (edit background/aksesoris) per gambar | 20–90 detik (jika dipakai) |
-| Generate time per set (5 gambar) | 1–3 menit (lebih cepat dari v0.2 karena tanpa training) |
+| Generate 1 foto (Nano Banana Pro, full pass) | ~10-30 detik (satu pemanggilan, bukan lagi 2 tahap terpisah) |
+| Generate 1 foto detail (Kontext, crop) | ~5-15 detik |
+| Generate 1 klip video (Kling, per klip 3-15 detik) | ~30-90 detik (async via queue, tidak blocking) |
+| Generate set foto lengkap | 1-5 menit tergantung jumlah gambar diminta |
 | Availability  | 99%                       |
-| Storage       | Supabase                  |
+| Storage       | Supabase Storage (kerja) + Cloudinary (final, setelah publish) |
 | Security      | Authenticated access only |
 
 ---
 
 # 9. AI Pipeline
 
-## Provider — revisi v0.3: dua model, dua peran berbeda
+## Provider — Fal.ai (satu-satunya provider), beberapa model berbeda peran
 
-**Fal.ai** tetap jadi satu-satunya provider, tapi kombinasi modelnya diganti
-setelah riset perbandingan (lihat §22):
+1. **Nano Banana Pro** (`fal-ai/nano-banana-pro/edit`, Gemini 3 Pro
+   Image) — **mesin utama**, dipakai untuk foto `utama`/`angle`/`seri`
+   (§7.6). Menerima BANYAK foto referensi sekaligus (`image_urls: string[]`)
+   + 1 prompt bebas — pola ini yang terbukti di tes manual pemilik brand
+   jauh lebih akurat menjaga motif/tekstur produk dibanding model VTO
+   sempit (FLUX VTO/FASHN) yang cuma menerima 2 foto tanpa instruksi teks
+   bebas. Menggantikan pipeline lama FLUX VTO (tahap 1) + FLUX Kontext Pro
+   (tahap 2).
+2. **FLUX Kontext Pro** (`fal-ai/flux-pro/kontext`) — HANYA untuk foto
+   `detail` (crop/zoom murni dari foto utama yang sudah jadi, bukan
+   re-render dari nol) — operasi murah & cukup untuk reframe.
+3. **Kling 3.0 Pro** (`fal-ai/kling-video/v3/pro/image-to-video`) — video
+   image-to-video, per klip (§7.8).
+4. **fal-ai/ffmpeg-api/merge-videos** — gabung klip video jadi satu file
+   (gratis, operasi ffmpeg murni).
+5. **openrouter/router** (model `anthropic/claude-sonnet-4.5`) — text-gen
+   Content Studio (caption, headline, storyboard, motion note). Endpoint
+   pengganti `fal-ai/any-llm` yang sudah deprecated per dokumentasi
+   fal.ai. Reuse `FAL_KEY` yang sama, tidak butuh vendor/API key baru.
 
-1. **FLUX Virtual Try-On (`fal-ai/flux-pro/v1/vto`)** — mesin utama,
-   **wajib** dipakai di tahap 1 tiap generate. Model ini dibuat khusus oleh
-   Black Forest Labs untuk kasus "pakaikan produk fashion ke foto orang",
-   dan secara eksplisit menjaga logo, print, jahitan, dan detail hardware
-   tetap utuh — ini pas dengan syarat mutlak "detail produk tidak boleh
-   ditambah/dikurangi". Input-nya cukup foto model + foto produk, output-nya
-   foto model memakai produk itu. **Tidak butuh training apapun.**
-2. **FLUX.1 Kontext Pro** atau **Nano Banana (Gemini 2.5 Flash Image /
-   Nano Banana Pro)** — tahap 2, **default aktif di v0.5** (direvisi dari
-   "opsional" di v0.3/v0.4). Karena background sekarang harus terasa
-   bervariasi & mewah di setiap produk (§7.4), tahap ini praktis berjalan
-   di hampir semua generate, bukan hanya saat admin memilih preset
-   tertentu. Tugasnya mengganti seluruh background & menambah aksesoris
-   pada hasil tahap 1, tanpa menyentuh produk.
+> Model lama `fal-ai/fashn/tryon/v1.6` (FASHN VTO, sempat dipakai sebagai
+> pengganti FLUX VTO sebelum pivot ke Nano Banana Pro) masih ada di
+> `FAL_MODELS` sebagai referensi/kemungkinan fallback, TIDAK dipakai lagi
+> di pipeline aktif manapun.
 
-> **Kenapa diganti dari v0.2 (FLUX Kontext Pro + LoRA):** Kontext Pro adalah
-> model editing serba guna — bagus tapi tidak dilatih khusus menjaga
-> fidelitas pakaian. FLUX VTO purpose-built untuk itu, hasilnya lebih bisa
-> diandalkan untuk syarat "semirip mungkin, tanpa nambah/kurang", sekaligus
-> lebih cepat (<4 detik vs 20-90 detik), lebih murah, dan tidak perlu
-> training LoRA (hemat biaya + waktu setup + kompleksitas).
-
-## Input
-
-* Foto model referensi (dipakai langsung, tanpa training).
-* Foto pose referensi.
-* Foto produk flat-lay (depan, belakang, detail).
-* Background (preset atau hasil komposisi improvisasi, §7.4) & aksesoris
-  terpilih.
-* Warna produk (untuk kerudung/heels, dipakai di tahap 2).
-
-## Cara Kerja (disederhanakan untuk yang belum familiar)
-
-Semua ini **tidak butuh aplikasi/server AI terpisah** — dipanggil langsung
-dari Next.js lewat SDK JavaScript resmi Fal.ai (`@fal-ai/client`), dari
-Route Handler atau Server Action (server-side, API key aman di server, tidak
-pernah dikirim ke browser):
+## Cara Kerja (Generate Foto)
 
 ```
 Upload foto (browser) → Supabase Storage
         |
         v
-Next.js Server Action / Route Handler
+Next.js Route Handler (POST /api/generate-set)
         |
         v
-TAHAP 1: Panggil FLUX VTO (foto model + foto produk)
+Server tentukan background (mode Auto: preset atau AI-improvised,
+komposisi teks murni, tanpa panggilan LLM tambahan)
         |
         v
-Fal.ai memproses di server cloud mereka (bukan di komputer Denny)
+Untuk tiap foto utama/angle/seri:
+  Panggil Nano Banana Pro (foto model + SEMUA foto produk + prompt)
+Untuk tiap foto detail:
+  Panggil Kontext (crop dari foto utama yang sudah selesai)
         |
         v
-Hasil tahap 1: foto model memakai produk (detail terjaga)
+Fal.ai memproses di server cloud mereka
         |
         v
-Server tentukan background (mode Auto: pilih preset atau susun deskripsi
-improvisasi berdasarkan warna/kategori produk, lihat §7.4)
+Simpan URL ke Supabase Storage + catat di ai_generations/ai_generation_sets
         |
         v
-TAHAP 2 (default aktif di v0.5):
-Panggil FLUX Kontext Pro / Nano Banana dengan hasil tahap 1 sebagai input
+Tampilkan ke admin (status per-gambar real-time)
         |
         v
-Hasil akhir: foto dengan background mewah & aksesoris sesuai pilihan
+(opsional) Generate video — lihat §7.8
         |
         v
-Simpan URL ke Supabase Storage + catat di Supabase Database
-        |
-        v
-Tampilkan ke admin di dashboard
+(setelah admin approve) Publish → update products.image/detail/warna_images
 ```
 
-Karena tidak ada lagi training LoRA, seluruh proses generate satu gambar
-kini **sinkron** (bisa ditunggu langsung, tidak perlu polling job
-terpisah) — ini yang membuat estimasi waktu di §8 jauh lebih cepat
-dibanding v0.2.
+## Cara Kerja (Video)
 
-## Prompt
-
-Lihat §7.6 untuk prompt tahap 1 (FLUX VTO) dan tahap 2 (Kontext Pro/Nano
-Banana) — keduanya disimpan di server dan tidak dapat diubah pengguna biasa.
+```
+Admin pilih foto + urutan cerita
+        |
+        v
+Submit 1 job Kling per foto (fal.queue.submit, async)
+        |
+        v
+Polling status tiap klip (queued/processing/completed/failed)
+        |
+        v
+Semua klip selesai → submit job merge-videos (URUT sesuai array)
+        |
+        v
+Polling status merge
+        |
+        v
+Video final tersimpan (History: ai_generation_sets.video_url;
+Content Studio: dikembalikan ke client, disimpan saat draft di-save)
+```
 
 ---
 
 # 10. System Architecture
 
-> **Revisi v0.4:** AI Fashion Studio **tidak** punya project Supabase
-> sendiri — semua tabel baru (`models`, `poses`, `generation_sets`,
-> `generations`, `background_presets`, `accessory_presets`) ditambahkan ke
-> **project Supabase Deera yang sudah ada** (yang juga dipakai
-> catalog/admin/pos/finance). Ini memungkinkan `generation_sets.product_kode`
-> jadi foreign key asli ke `products.kode`, dan hasil generate yang sudah
-> di-approve admin bisa **dipush langsung** untuk mengisi field
-> `products.image` / `products.detail` / `products.video` — sehingga muncul
-> otomatis di catalog.deera.id begitu dipublish (lihat §15,
-> `POST /api/generation-sets/:id/publish`).
+Tabel baru Deera Studio (prefix `ai_`) ditambahkan ke **project Supabase
+Deera yang sudah ada** (project ref `khpgjfsaucrhihadnewq`, sama dengan
+`catalog`/`admin`/`pos`/`finance`) — bukan project terpisah. Ini
+memungkinkan `ai_generation_sets.product_kode` jadi foreign key asli ke
+`products.kode`, dan hasil generate yang di-approve admin dipush langsung
+mengisi `products.image`/`detail`/`warna_images`, muncul otomatis di
+catalog.deera.id tanpa perubahan kode di app itu.
 
 ```text
-Next.js Dashboard (Admin Brand, Tim Konten) — AI Fashion Studio, app baru
+Next.js 15 App Router (Deera Studio) — dark glassmorphism UI
         |
         v
-API Route / Server Action
+Route Handler / Server Action
         |
         +---> Supabase Database — PROJECT SAMA DENGAN DEERA
-        |      ├─ tabel existing: products, stok_warna, sales, dst (dibaca)
-        |      └─ tabel baru: models, poses, generation_sets, generations,
-        |         background_presets, accessory_presets
+        |      ├─ tabel existing: products, stok_warna, sales, dst (dibaca/ditulis saat publish)
+        |      └─ tabel baru (prefix ai_): ai_models, ai_poses,
+        |         ai_background_presets, ai_accessory_presets,
+        |         ai_generation_sets, ai_generations, ai_cost_log
+        |         + content_posts (Content Studio, tanpa prefix ai_)
         |
-        +---> Supabase Storage (bucket/folder baru, terpisah dari folder
-        |      produk Deera yang sudah ada — lihat §13)
+        +---> Supabase Storage (bucket "ai-fashion-studio", terpisah dari
+        |      folder produk Deera yang sudah ada)
         |
         v
 Fal.ai API
-   +-- FLUX Virtual Try-On (tahap 1, wajib, tiap gambar)
-   +-- FLUX Kontext Pro / Nano Banana (tahap 2, opsional, background/aksesoris)
+   +-- Nano Banana Pro edit (foto utama/angle/seri, Content Studio marketing/combo photo)
+   +-- FLUX Kontext Pro (foto detail crop)
+   +-- Kling 3.0 Pro (video per klip)
+   +-- ffmpeg-api/merge-videos (gabung video)
+   +-- openrouter/router (text-gen Content Studio)
         |
         v
-Generated Image
+Hasil (gambar/video) → Supabase Storage (kerja) atau langsung URL fal.ai
         |
         v
-Supabase Storage
-        |
+(setelah admin approve) Publish → Cloudinary → update products.*
+        |                Instagram Graph API → publish content_posts
         v
-(setelah admin approve) Publish → update products.image/detail/video
-        |
-        v
-Muncul di catalog.deera.id (apps/catalog, tanpa perubahan kode di app itu)
+catalog.deera.id (foto)     Instagram (konten)
 ```
 
 ---
@@ -610,49 +590,54 @@ Muncul di catalog.deera.id (apps/catalog, tanpa perubahan kode di app itu)
 # 11. Tech Stack
 
 ## Frontend
-* Next.js 15
-* TypeScript
-* Tailwind CSS
-* shadcn/ui
+* Next.js 15 (App Router) + TypeScript
+* Tailwind CSS v4
+* Desain sistem custom dark glassmorphism (bukan shadcn/ui seperti
+  rencana awal — komponen UI ditulis sendiri di `components/ui/`)
+* framer-motion (animasi), lucide-react (ikon), sonner (toast),
+  react-dropzone (upload gambar)
 
 ## Backend
-* Next.js Route Handlers
-* Server Actions
+* Next.js Route Handlers (semua endpoint `/api/*`)
 
 ## Database
-* Supabase Postgres — **project sama dengan Deera** (bukan project baru),
-  tabel baru ditambahkan di sana (lihat §10)
+* Supabase Postgres — project sama dengan Deera (§10)
 
 ## Storage
-* Supabase Storage — untuk file kerja (foto referensi model/pose, hasil
-  generate sebelum di-publish). Project sama dengan Deera, bucket/folder
-  baru terpisah.
-* **Cloudinary** — untuk gambar final yang sudah di-publish ke katalog.
-  Deera sudah pakai Cloudinary untuk `products.image`/`video`/`detail`
-  (lihat CLAUDE.md Deera §2 & §11), jadi saat admin publish hasil generate,
-  gambar diupload ke Cloudinary (akun Deera yang sama) supaya konsisten
-  dengan cara catalog.deera.id menampilkan gambar (auto-format WebP/AVIF,
-  dst). Lihat §13 dan §15.
+* Supabase Storage (bucket `ai-fashion-studio`) — file kerja & hasil
+  generate sebelum publish
+* Cloudinary — gambar final setelah publish ke katalog (akun Deera yang
+  sama dipakai `apps/admin`/`apps/pos`)
 
 ## AI
-* Fal.ai SDK (`@fal-ai/client`)
-* FLUX Virtual Try-On (`fal-ai/flux-pro/v1/vto`) — mesin utama, garment fidelity
-* FLUX.1 Kontext Pro / Nano Banana (Gemini 2.5 Flash Image) — edit tahap 2 (default aktif, §7.4/§9)
+* Fal.ai SDK (`@fal-ai/client`) — lihat §9 untuk daftar model
+
+## Integrasi lain
+* Instagram Graph API (`lib/instagram/client.ts`) — publish konten
+  Content Studio
 
 ---
 
 # 12. Database Schema
 
-> **Catatan v0.4:** Semua tabel di bawah ini ditambahkan ke **project
-> Supabase Deera yang sudah ada** (lihat §10) lewat migration baru — bukan
-> project terpisah. Tabel `products`, `stok_warna`, dst dari Deera **tidak
-> diubah**, hanya dibaca (dan `products` ditulis balik saat publish, lihat
-> §15).
+Semua tabel di bawah ini ada di **project Supabase Deera yang sudah ada**
+(§10). Tabel `products`, `stok_warna`, dst dari Deera **tidak diubah
+strukturnya**, hanya dibaca — kecuali `products.image`/`detail`/
+`warna_images` yang ditulis balik saat publish (§15).
 
-## models (revisi v0.3 — tanpa field LoRA, cukup foto referensi)
+> Catatan implementasi: skema live sudah berkembang lebih jauh dari file
+> migration tunggal yang ada di `supabase/migrations/` (lihat README) —
+> perubahan-perubahan berikutnya (kolom video, `content_posts`,
+> `ai_cost_log`, `product_images.detailHand`, dst) diterapkan langsung ke
+> project lewat migration terpisah yang belum semuanya di-export jadi
+> file lokal. Kalau setup project baru dari nol, jangan cuma andalkan
+> migration SQL awal — cek `types/database.ts` sebagai sumber kebenaran
+> struktur data terkini, atau tarik skema live lewat Supabase CLI/dashboard.
+
+## ai_models
 
 ```sql
-create table models (
+create table ai_models (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   thumbnail_url text,
@@ -661,48 +646,42 @@ create table models (
 );
 ```
 
-## poses (revisi v0.3 — terikat ke model_id, sumbernya boleh foto vendor lama)
+## ai_poses
 
 ```sql
-create table poses (
+create table ai_poses (
   id uuid primary key default gen_random_uuid(),
-  model_id uuid references models(id) not null, -- pose = foto model TERTENTU, bukan generik
+  model_id uuid references ai_models(id) not null,
   name text not null,
-  reference_image_url text not null, -- foto model dalam pose ini; dipakai langsung sebagai human_image di FLUX VTO
+  reference_image_url text not null,
   description text,
-  source text default 'vendor_archive', -- 'vendor_archive' | 'new_shoot' | 'ai_generated' — untuk audit asal foto
   is_active boolean default true,
   created_at timestamptz default now()
 );
 ```
 
-## background_presets (baru)
+## ai_background_presets
 
 ```sql
-create table background_presets (
+create table ai_background_presets (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  prompt_fragment text not null, -- deskripsi background untuk disisipkan ke prompt
+  prompt_fragment text not null,
   reference_image_url text,
-  mood_tags jsonb default '[]', -- ["mewah","romantis","hangat"] untuk matching
-  warna_affinity jsonb default '[]', -- ["pink","dusty rose","cream"] warna yang cocok
-  cocok_untuk_kategori jsonb default '[]', -- ["Gamis Jumbo", "Midi"] untuk auto-suggest
-  last_used_at timestamptz, -- untuk logika rotasi, hindari pemakaian berturut-turut
+  mood_tags jsonb default '[]',
+  warna_affinity jsonb default '[]',
+  cocok_untuk_kategori jsonb default '[]',
+  last_used_at timestamptz,
   use_count integer default 0,
   is_active boolean default true,
   created_at timestamptz default now()
 );
 ```
 
-> **Baru v0.5:** target minimal 15-20 baris terisi di tabel ini sebelum
-> launch, supaya mode Auto (§7.4) punya cukup variasi untuk dirotasi. Isi
-> awal jadi bagian pekerjaan konten sebelum go-live, bukan cuma pekerjaan
-> engineering.
-
-## accessory_presets (revisi v0.4 — tambah kategori)
+## ai_accessory_presets
 
 ```sql
-create table accessory_presets (
+create table ai_accessory_presets (
   id uuid primary key default gen_random_uuid(),
   category text not null, -- 'tas' | 'kalung' | 'cincin' | 'anting'
   name text not null,
@@ -713,427 +692,402 @@ create table accessory_presets (
 );
 ```
 
-> Kerudung & heels **tidak** punya tabel preset — warnanya otomatis
-> dihitung dari `products.warna` saat generate (lihat §7.6), tidak disimpan
-> sebagai pilihan admin.
-
-## generation_sets (revisi v0.4 — product_kode jadi FK asli + status publish)
+## ai_generation_sets
 
 ```sql
-create table generation_sets (
+create table ai_generation_sets (
   id uuid primary key default gen_random_uuid(),
-  product_kode text references products(kode) not null, -- FK ASLI (v0.3: "longgar") — sama project dgn Deera
-  model_id uuid references models(id),
-  pose_id uuid references poses(id),
-  background_mode text not null default 'auto', -- 'auto' | 'preset' | 'ai_improvised' (baru v0.5)
-  background_preset_id uuid references background_presets(id), -- diisi kalau mode preset/auto jatuh ke preset
-  background_description text, -- diisi kalau mode ai_improvised/auto jatuh ke improvisasi (hasil komposisi, lihat §7.6)
-  accessory_preset_ids jsonb default '[]', -- array id dari accessory_presets, lintas kategori
-  product_images jsonb not null, -- {front, back, detail_neck, detail_sleeve}
-  product_warna text, -- diambil dari products.warna, dipakai untuk kerudung/heels
+  product_kode text references products(kode) not null,
+  model_id uuid references ai_models(id),
+  pose_id uuid references ai_poses(id),
+  background_mode text not null default 'auto',
+  background_preset_id uuid references ai_background_presets(id),
+  background_description text,
+  accessory_preset_ids jsonb default '[]',
+  product_images jsonb not null,
+  -- { front, back?, detailNeck?, detailSleeve?, detailHand?, detailChest?,
+  --   detailHem?, fullBody? } — detailHand ditambahkan Agustus 2026,
+  -- terpisah dari detailSleeve (manset/pergelangan vs bahu/lengan atas)
+  product_warna text,
   status text not null default 'queued',
   -- 'queued' | 'processing' | 'completed' | 'partial' | 'failed'
-  total_cost integer, -- akumulasi biaya generate (Rupiah) untuk set ini
-  published_at timestamptz, -- diisi saat admin publish hasil ke katalog Deera (lihat §15)
-  published_image_urls jsonb, -- snapshot URL yang dipush ke products.image/detail/video
-  created_at timestamptz default now()
+  total_cost integer, -- akumulasi biaya foto (Rupiah) untuk set ini
+  published_at timestamptz,
+  published_image_urls jsonb,
+  created_at timestamptz default now(),
+  -- Video "cerita gabungan" (Agustus 2026)
+  video_status text, -- 'processing' | 'completed' | 'failed' | null
+  video_url text,
+  video_error_message text,
+  video_started_at timestamptz,
+  video_clip_jobs jsonb default '[]', -- [{requestId, sourceUrl, status, clipUrl}]
+  video_merge_request_id text,
+  video_cost integer -- akumulasi biaya video (Rupiah) untuk set ini
 );
 ```
 
-## generations (revisi v0.3 — tambah field dua tahap)
+## ai_generations
 
 ```sql
-create table generations (
+create table ai_generations (
   id uuid primary key default gen_random_uuid(),
-  generation_set_id uuid references generation_sets(id) not null,
-  image_role text not null, -- 'utama' | 'detail' | 'seri'
-  vto_image_url text, -- hasil tahap 1 (FLUX VTO), sebelum edit background
-  output_image_url text, -- hasil akhir (setelah tahap 2 jika dipakai, atau sama dengan vto_image_url jika tidak)
-  has_stage2 boolean default false, -- true jika background/aksesoris diedit di tahap 2
+  generation_set_id uuid references ai_generation_sets(id) not null,
+  image_role text not null, -- 'utama' | 'detail' | 'seri' | 'angle'
+  pose_id uuid references ai_poses(id), -- terisi utk 'utama'/'angle'
+  variant_warna text, -- terisi utk 'seri' — nama warna varian
+  variant_product_images jsonb, -- terisi utk 'seri' — { image: url foto full-body warna itu }
+  vto_image_url text,
+  output_image_url text,
+  has_stage2 boolean default false,
   status text not null default 'queued',
   generation_time_ms integer,
-  cost integer, -- biaya gambar ini dalam Rupiah (akumulasi tahap 1 + tahap 2)
+  cost integer, -- Rupiah
   error_message text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  -- Video per-generation (opsional, sebelum "video cerita gabungan" jadi default)
+  video_url text,
+  video_status text,
+  video_generation_time_ms integer,
+  video_cost integer
 );
 ```
+
+## content_posts (Content Studio, Agustus 2026)
+
+```sql
+create table content_posts (
+  id uuid primary key default gen_random_uuid(),
+  product_kode text not null,
+  secondary_product_kodes jsonb default '[]', -- mode grup, 2-5 produk
+  image_urls jsonb not null default '[]',
+  content_type text not null, -- 'feed_single' | 'carousel' | 'reel'
+  theme text, -- 'produk_highlight' | 'tips_styling' | 'brand_story' | 'promo' | 'brand_awareness'
+  caption text,
+  hashtags jsonb default '[]',
+  extra_notes text,
+  scheduled_at timestamptz,
+  status text not null default 'draft', -- 'draft' | 'scheduled' | 'published' | 'failed'
+  instagram_media_id text,
+  published_at timestamptz,
+  error_message text,
+  created_by_email text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  video_url text
+);
+```
+
+## ai_cost_log (Agustus 2026 — pencatatan biaya terpusat, lihat §18)
+
+```sql
+create table ai_cost_log (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  feature text not null, -- lihat AiCostFeature di lib/cost-log-shared.ts
+  model text,
+  cost_usd numeric not null,
+  ref_type text, -- 'generation_set' | 'generation' | 'content_post'
+  ref_id uuid,
+  note text
+);
+```
+
+## products.warna_images (kolom tambahan di tabel Deera existing)
+
+`jsonb`, dipakai fitur "seri" (§7.6) untuk menyimpan foto per varian
+warna produk (dipublish dari Deera Studio, dibaca katalog untuk
+color-swatch picker di halaman detail produk).
 
 ---
 
-# 13. Storage Structure (revisi v0.4 — Supabase Storage untuk kerja, Cloudinary untuk publish)
+# 13. Storage Structure
 
-## Supabase Storage (file kerja, belum tentu final)
+## Supabase Storage (bucket `ai-fashion-studio`, file kerja)
 
 ```text
-ai-studio/
-  models/
-    {model_id}/reference/       -- foto referensi model (dipakai langsung, tanpa training)
-  poses/
-    {pose_id}/                  -- foto pose (boleh dari arsip vendor lama)
-  products/
-    {product_kode}/flat-lay/    -- foto raw flat-lay yang diupload admin
-  generated/
-    {generation_set_id}/utama.jpg
-    {generation_set_id}/detail-1.jpg
-    {generation_set_id}/detail-2.jpg
-    {generation_set_id}/detail-3.jpg
-    {generation_set_id}/seri.jpg
+ai-fashion-studio/
+  models/{model_id}/reference/
+  poses/{pose_id}/
+  products/{product_kode}/flat-lay/
+  generated/{generation_set_id}/...
+  content-posters/            -- hasil render poster (Content Studio)
+  content-marketing-photos/   -- hasil Foto Marketing AI / Foto Gabungan Produk AI
 ```
-
-> Prefix `ai-studio/` dipakai supaya tidak bentrok dengan folder yang
-> mungkin sudah ada di storage Deera untuk keperluan lain.
 
 ## Cloudinary (hasil final, setelah publish)
 
 ```text
 deera/products/{product_kode}/
-  ai-utama.jpg
-  ai-detail-1.jpg
-  ai-detail-2.jpg
-  ai-detail-3.jpg
-  ai-seri.jpg
+  ai-utama.jpg, ai-detail-1.jpg, ..., ai-seri-{warna}.jpg
 ```
 
 URL Cloudinary hasil upload inilah yang ditulis ke
-`products.image`/`products.detail`/`products.video` saat admin menekan
-**Publish** (lihat §15).
+`products.image`/`products.detail`/`products.warna_images` saat admin
+menekan **Publish**.
 
 ---
 
 # 14. UI Pages
 
 ## /login
-Form login.
+Form login (auto-suffix `@deera.id`), dibungkus background interaktif
+`KineticGrid` (partikel kinetik yang bereaksi ke pointer) — sama seperti
+semua halaman lain setelah login.
 
 ## /dashboard
-Statistik sederhana (jumlah SKU diproses bulan ini, biaya generate akumulasi,
-model aktif).
+Ringkasan operasional (REVISI Agustus 2026 v2): SKU diproses bulan ini,
+konten Content Studio dibuat bulan ini, **biaya bulan ini** (gabungan
+foto/video Generate-History + SEMUA biaya Content Studio dari
+`ai_cost_log` — sebelumnya hanya menjumlah `total_cost` dan melewatkan
+`video_cost` serta seluruh Content Studio, sudah diperbaiki), **biaya
+sepanjang waktu**, rincian biaya per fitur (progress bar), daftar "perlu
+perhatian" (set/post yang gagal), aktivitas terbaru lintas Generate/
+History + Content Studio, dan jumlah model aktif.
 
-## /models
-Manajemen model — buat/edit nama & thumbnail, aktivasi/nonaktifkan. Foto
-pose dikelola di halaman terpisah (/poses), karena satu model bisa punya
-banyak foto pose.
-
-## /poses
-Manajemen pose per model — upload foto pose (boleh dari arsip katalog
-vendor lama), pilih model pemiliknya, edit nama/deskripsi.
+## /models, /poses
+Manajemen model & pose per model — form tambah dengan layout
+upload-di-kiri, field-di-kanan; tiap kartu punya mode edit inline.
 
 ## /presets
-Manajemen background & aksesoris.
+Manajemen background & aksesoris — sama, form upload-di-kiri +
+kemampuan edit gambar/field kartu yang sudah ada (termasuk yang lama
+tanpa gambar, bisa ditambahkan belakangan).
 
 ## /generate
-Halaman utama generate — pilih model/pose/background/aksesoris, upload produk,
-generate satu set foto.
+Halaman utama generate — pilih produk dari katalog Deera (grid gambar),
+model/pose (grid gambar), background (thumbnail preset atau custom),
+aksesoris (pill dengan thumbnail bulat kecil), upload flat-lay (termasuk
+slot Detail Tangan terpisah), atur jumlah foto detail/seri, generate.
 
 ## /history
-Riwayat hasil, dikelompokkan per SKU/set. Ada tombol **Publish** per set
-untuk mendorong gambar terpilih ke `products.image`/`detail`/`video` di
-katalog Deera (lewat Cloudinary, lihat §13 & §15) — set yang sudah
-dipublish ditandai jelas supaya tidak double-publish.
+Riwayat per SKU/set dengan **pagination (10/halaman) + search kode
+produk**. Tombol Publish, Tambah Warna Seri, dan Generate Video (dengan
+progress polling) per set.
+
+## /content
+Content Studio — pemilihan 1-5 produk, panel tema/tipe konten, panel
+Poster AI (headline/subtitle/caption bawah/scene + render poster), panel
+Foto Marketing AI / Foto Gabungan Produk AI (per-slide untuk carousel),
+panel Video, panel caption+hashtag, kalender konten, dan daftar "Semua
+Konten" dengan **pagination + search**.
 
 ---
 
-# 15. API Contract (MVP)
+# 15. API Contract (ringkasan endpoint aktif)
 
-## POST /api/generate-set
+## Generate/History
+* `POST /api/generate-set` — generate satu set foto.
+* `GET /api/generation-sets/:id` — detail set.
+* `POST /api/generation-sets/:id/add-seri` — tambah warna seri ke set
+  yang sudah ada, tanpa re-generate utama.
+* `POST /api/generation-sets/:id/publish` — push ke katalog Deera
+  (Cloudinary + `products.image`/`detail`/`warna_images`).
+* `POST /api/generation-sets/:id/generate-video` — submit job video
+  cerita gabungan.
+* `GET /api/generation-sets/:id/generate-video/status` — polling status
+  video (reconcile klip → merge → selesai).
+* `POST /api/generations/:id/regenerate` — generate ulang satu gambar.
 
-Generate satu set foto (utama + detail + seri) untuk satu produk.
+## Content Studio
+* `POST /api/content-posts` — buat draft.
+* `PATCH /PATCH /DELETE /api/content-posts/:id` — update/hapus draft.
+* `POST /api/content-posts/:id/publish` — publish ke Instagram.
+* `POST /api/content/generate-caption` — caption + hashtag.
+* `POST /api/content/suggest-headline` — Poster AI (headline/subtitle/
+  bottomCaption/sceneIdea).
+* `POST /api/content/suggest-storyboard` — alur cerita multi-slide (1
+  produk).
+* `POST /api/content/suggest-group-storyboard` — alur cerita grup (2-5
+  produk).
+* `POST /api/content/render-poster` — render poster PNG.
+* `POST /api/content/generate-marketing-photo` — restyle 1 foto.
+* `POST /api/content/generate-combo-photo` — gabung 2-5 foto jadi 1 frame.
+* `POST /api/content/generate-video` — submit job video (stateless).
+* `GET /api/content/generate-video/status` — polling status video.
+* `POST /api/content/generate-calendar` — kalender konten bulanan.
+* `GET /api/content/instagram-status` — cek koneksi akun Instagram.
 
-### Request
-```json
-{
-  "modelId": "uuid",
-  "poseId": "uuid",
-  "backgroundPresetId": "uuid",
-  "accessoryPresetIds": ["uuid"],
-  "productKode": "D-07-OSK",
-  "productImages": {
-    "front": "https://...",
-    "back": "https://...",
-    "detailNeck": "https://...",
-    "detailSleeve": "https://..."
-  },
-  "productWarna": "HITAM"
-}
-```
-### Response
-```json
-{
-  "generationSetId": "uuid",
-  "status": "queued"
-}
-```
-
-## GET /api/generation-sets/:id
-
-### Response
-```json
-{
-  "id": "uuid",
-  "status": "completed",
-  "images": [
-    { "role": "utama", "url": "https://...", "status": "completed" },
-    { "role": "detail", "url": "https://...", "status": "completed" },
-    { "role": "detail", "url": "https://...", "status": "completed" },
-    { "role": "detail", "url": "https://...", "status": "completed" },
-    { "role": "seri", "url": "https://...", "status": "completed" }
-  ],
-  "totalCost": 9100
-}
-```
-
-## POST /api/generations/:id/regenerate
-
-Generate ulang satu gambar tertentu dalam sebuah set (tanpa mengulang
-seluruh set).
-
-## POST /api/generation-sets/:id/publish (baru v0.4)
-
-Push gambar terpilih dari satu set ke katalog Deera — upload ke Cloudinary
-lalu update `products.image`/`products.detail`/`products.video` untuk
-`product_kode` terkait.
-
-### Request
-```json
-{
-  "imageIds": {
-    "utama": "generation-uuid",
-    "detail": ["generation-uuid", "generation-uuid", "generation-uuid"],
-    "seri": "generation-uuid"
-  }
-}
-```
-### Response
-```json
-{
-  "publishedAt": "2026-08-07T10:00:00Z",
-  "cloudinaryUrls": {
-    "image": "https://res.cloudinary.com/deera/.../ai-utama.jpg",
-    "detail": ["https://...", "https://...", "https://..."]
-  }
-}
-```
-
-### Perilaku
-
+### Perilaku Publish (foto)
 * Hanya gambar dengan `status = 'completed'` yang bisa dipublish.
-* Update `products.image` dan `products.detail` bersifat **overwrite** —
-  admin diberi konfirmasi eksplisit sebelum menimpa foto lama, karena aksi
-  ini mengubah data live yang dipakai `apps/catalog` (sesuai aturan
-  `Explicit permission required` untuk perubahan data yang tampil publik).
-* `generation_sets.published_at` dan `published_image_urls` diisi setelah
-  sukses, sebagai jejak audit.
+* Update `products.image`/`detail`/`warna_images` bersifat overwrite —
+  admin diberi konfirmasi eksplisit sebelum menimpa foto lama.
+* `published_at` dan `published_image_urls` diisi setelah sukses, sebagai
+  jejak audit.
 
 ---
 
 # 16. Error Handling
 
-| Case                       | Message                             |
+| Case                       | Penanganan                             |
 | --------------------------- | ------------------------------------ |
-| File terlalu besar          | Maksimal 10 MB                       |
-| Format tidak didukung       | Gunakan JPG atau PNG                 |
-| Tahap 1 (VTO) gagal          | Gagal memakaikan produk, coba ulangi atau ganti foto model/produk |
-| Tahap 2 (edit background) gagal | Background/aksesoris gagal diterapkan, foto tahap 1 tetap tersimpan sebagai fallback |
-| AI timeout                  | Generate timeout, coba lagi          |
-| Provider gagal               | AI service unavailable               |
-| Budget bulan ini habis (opsional, kontrol internal) | Kuota generate bulan ini tercapai |
+| File terlalu besar/format salah | Ditolak di dropzone sebelum upload |
+| Generate foto (Nano Banana Pro/Kontext) gagal | Status `failed` per gambar, foto lain dalam set tetap lanjut (`status: partial` di level set) |
+| Generate video (klip/merge) gagal | `video_status: failed` + `video_error_message`, tidak menghapus foto yang sudah selesai |
+| AI timeout / provider gagal | Pesan error ditampilkan via toast, admin bisa retry |
+| Pencatatan biaya (`ai_cost_log`) gagal | **Tidak pernah menggagalkan fitur utama** — `logAiCost()` best-effort, gagal cuma di-`console.error`, generate tetap selesai |
+| Publish Instagram gagal | `content_posts.status: failed` + `error_message`, muncul di Dashboard "Perlu perhatian" |
 
 ---
 
 # 17. Security
 
-* Semua halaman dilindungi auth.
-* Storage bucket private.
-* Signed URL untuk preview/download.
-* API key Fal.ai hanya di server (server actions/route handlers), tidak pernah
-  dikirim ke browser.
-* **Baru v0.4 — karena database sama dengan Deera:** tabel baru (`models`,
-  `poses`, `generation_sets`, dst) perlu RLS policy sendiri agar tidak
-  mewarisi policy tabel Deera yang sudah ada secara tidak sengaja. Akses
-  tulis ke `products` (saat publish) dibatasi lewat service role di server
-  saja — Next.js AI Fashion Studio tidak boleh expose kemampuan ini ke
-  client. Perlu review RLS existing Deera sebelum migration ditambahkan,
-  supaya tidak mengubah perilaku `apps/admin`/`apps/pos`/`apps/finance`
-  yang sudah berjalan.
+* Semua halaman (kecuali `/login`) dilindungi auth (`middleware.ts` +
+  `ProtectedRoute`).
+* Storage bucket privat kecuali yang memang perlu public read (hasil
+  akhir untuk ditampilkan/didownload).
+* API key Fal.ai/Cloudinary/Instagram hanya di server (Route Handler),
+  tidak pernah dikirim ke browser.
+* Tabel baru (`ai_*`, `content_posts`, `ai_cost_log`) punya RLS policy
+  sendiri, tidak mewarisi policy tabel Deera lama.
+* Insert ke `ai_cost_log` HANYA lewat service-role client server
+  (`logAiCost()`, `lib/cost-log.ts`) — tidak bisa dipalsukan dari
+  browser. Tabel itu hanya bisa **dibaca** oleh authenticated user lewat
+  RLS (dipakai Dashboard).
+* Akses tulis ke `products` (saat publish) dibatasi lewat service role di
+  server saja.
 
 ---
 
-# 18. Monitoring
+# 18. Monitoring & Cost Tracking
 
-* Sentry untuk error frontend/backend.
-* Log generate disimpan di database (`generation_sets`, `generations`).
-* Tracking durasi generate dan **biaya per set**, dipecah per tahap (VTO vs
-  edit background/aksesoris) untuk kontrol budget bulanan.
+**Pencatatan biaya AI terpusat (`ai_cost_log`, Agustus 2026)** — dibuat
+setelah investigasi menemukan bahwa Dashboard versi sebelumnya HANYA
+menjumlah `ai_generation_sets.total_cost` (pipeline foto Generate/
+History), melewatkan `video_cost` (kolom terpisah di tabel yang sama)
+DAN seluruh biaya Content Studio (caption/headline/storyboard AI, Foto
+Marketing AI, Foto Gabungan Produk AI, video Content Studio) yang sama
+sekali tidak tercatat di mana pun.
 
----
+Sekarang setiap panggilan AI berbayar yang sebelumnya tidak tercatat
+dicatat lewat `logAiCost()` (`lib/cost-log.ts`, service-role, best-effort
+— gagal catat tidak pernah menggagalkan fitur utama) ke `ai_cost_log`,
+dan Dashboard (§14) menjumlah **semua sumber** (kolom `total_cost`/
+`video_cost` di `ai_generation_sets` UNTUK Generate/History, PLUS
+`ai_cost_log` UNTUK Content Studio) — tidak dobel-hitung karena tiap
+sumber biaya cuma dicatat di SATU tempat.
 
-# 19. Roadmap (revisi)
-
-## V1 — MVP (2–3 minggu, lebih singkat dari v0.2 karena tanpa training LoRA)
-* Migration tabel baru ke project Supabase Deera + RLS policy
-* Auth (reuse Supabase Auth Deera)
-* Model management (upload foto referensi, tanpa training)
-* Pose management per model (seed dari arsip foto vendor lama)
-* Upload produk (atau baca `products` existing dari Deera by kode)
-* Generate 1 set foto (utama + 3 detail + seri) per produk — tahap 1 FLUX
-  VTO wajib, tahap 2 edit background/aksesoris default aktif (mode Auto)
-* Background library (15-20+ preset mewah) + mode AI Improvisasi +
-  aksesoris (tas/kalung/cincin/anting; kerudung/heels auto-warna)
-* History per SKU
-* Download
-* Publish ke katalog Deera (upload Cloudinary + update `products`)
-
-## V2
-* Video AI ("video cantik") — dipindah dari MVP ke sini, setelah workflow
-  foto stabil dan budget bertambah.
-* Batch generate
-* Queue worker
-* Email notification
-
-## V3
-* Auto QC AI
-* Marketplace export
-* Multi-size output (auto-resize per platform)
-
-## V4
-* Multi-model campaign
-* Background bertema kampanye/musiman (mis. Lebaran, Ramadan) — perluasan
-  dari mode Auto yang sudah jadi default sejak V1
+Belum ada monitoring error terpusat (Sentry dsb) — error saat ini
+ditangani lewat toast di UI + `console.error` di server, cukup untuk
+skala pemakaian internal saat ini.
 
 ---
 
-# 20. Estimasi Biaya Operasional (revisi v0.5 — tahap 2 default aktif)
+# 19. Roadmap
 
-## Harga dasar Fal.ai (per Agustus 2026)
+## Sudah selesai (dulu direncanakan sebagai V1/V2, sekarang live)
+* Generate foto katalog (Nano Banana Pro single-stage).
+* Video AI — dulu "ditunda ke V2", sekarang live sejak Agustus 2026 di
+  History DAN Content Studio.
+* Content Studio penuh (caption, poster, foto marketing, foto gabungan,
+  publish Instagram) — tidak ada di rencana awal sama sekali.
+* Pencatatan biaya terpusat + Dashboard yang akurat.
 
-| Item | Harga | Sumber |
+## Berikutnya (belum diimplementasi)
+* Batch generate (banyak SKU sekaligus dalam satu antrian).
+* Auto QC AI (deteksi kualitas otomatis sebelum ditampilkan admin).
+* Integrasi marketplace (auto-upload Shopee/Tokopedia).
+* Multi-user role (approval workflow terpisah).
+* Auto-resize multi-format marketplace.
+* Monitoring error terpusat (Sentry atau setara), kalau skala pemakaian
+  bertambah besar.
+* Background bertema kampanye/musiman (Lebaran, Ramadan) — perluasan
+  mode Auto yang sudah ada.
+
+---
+
+# 20. Estimasi & Realita Biaya Operasional
+
+## Harga dasar Fal.ai (per Agustus 2026, diverifikasi ulang)
+
+| Item | Harga | Catatan |
 | --- | --- | --- |
-| FLUX Virtual Try-On — tahap 1 (2 input + 1 output @1024px) | ~$0.0475/gambar (~Rp 760) | fal.ai/models/fal-ai/flux-pro/v1/vto |
-| FLUX.1 Kontext Pro — tahap 2, edit background/aksesoris | $0.04/gambar (~Rp 640) | fal.ai/models/fal-ai/flux-pro/kontext |
-| Nano Banana (Gemini 2.5 Flash Image) — alternatif tahap 2 | ~$0.039/gambar (~Rp 625) | pricepertoken.com/pricing-page/model/google-gemini-2.5-flash-image |
+| Nano Banana Pro edit (1K) — foto utama/angle/seri, dan Foto Marketing/Gabungan AI di Content Studio | $0.15/gambar (~Rp 2.700) | Mesin utama, dipakai di hampir semua fitur foto |
+| FLUX Kontext Pro — foto detail (crop) | $0.04/gambar (~Rp 640) | Cuma reframe, bukan re-render |
+| Kling 3.0 Pro image-to-video — per klip, audio off | $0.112/detik (~Rp 2.005/detik) | Klip 5 detik ≈ Rp 10.025 |
+| ffmpeg-api/merge-videos — gabung klip | $0/detik compute | Gratis, operasi ffmpeg murni |
+| openrouter/router (Claude Sonnet 4.5) — text-gen Content Studio | Bervariasi per panggilan, fal.ai melaporkan `usage.cost` aktual per request | Dicatat otomatis ke `ai_cost_log`, bukan estimasi tetap |
 
-Tidak ada lagi biaya training model — dihapus sepenuhnya di v0.3 (lihat §9).
+Tidak ada biaya training model.
 
-## Estimasi biaya per produk (5 gambar/set)
+## Estimasi biaya per set foto (bervariasi tergantung jumlah gambar diminta admin)
 
-> **Revisi v0.5:** karena background bervariasi & mewah sekarang jadi
-> default untuk *semua* produk (§7.4), skenario "hanya tahap 1" di v0.3/v0.4
-> tidak lagi relevan sebagai kondisi normal — dianggap kasus khusus saja
-> (mis. admin sengaja mau reuse background dari generate sebelumnya).
+Admin mengatur sendiri berapa banyak foto angle/detail/seri per set
+(kontrol biaya) — bukan lagi paket tetap "5 gambar" seperti rencana awal.
+Contoh: set dengan 1 utama + 3 detail + 1 seri ≈ Rp 2.700 + (3×Rp 640) +
+Rp 2.700 ≈ **Rp 7.320**.
 
-| Skenario | Biaya/gambar | Biaya/produk (5 gambar) |
-| --- | --- | --- |
-| **Normal (tahap 1 + tahap 2, default)** | ~Rp 1.820 (dengan buffer retry 1.3x) | **~Rp 9.100** |
-| Kasus khusus: hanya tahap 1 (background di-reuse, tidak diedit) | ~Rp 990 (buffer 1.3x) | ~Rp 4.950 |
+## Pencatatan biaya nyata (bukan lagi cuma estimasi kasar)
 
-## Kapasitas dengan budget Rp 500.000/bulan
-
-| Skenario | Kapasitas/bulan |
-| --- | --- |
-| **Normal — semua produk dapat background bervariasi (keputusan v0.5)** | **~55 SKU/bulan** |
-| Kalau budget dinaikkan ke ~Rp 900.000/bulan | ~100 SKU/bulan dengan variasi penuh tetap terjaga |
-| Kalau sebagian produk pakai background reuse (mis. hanya produk andalan yang dapat variasi penuh) | ~70–75 SKU/bulan dengan budget tetap Rp 500rb |
-
-Karena tidak ada lagi biaya training LoRA yang memotong budget bulan
-pertama (seperti di v0.2), kapasitas ini berlaku **sejak bulan pertama**,
-bukan cuma di bulan kedua dst.
-
-**Keputusan (v0.5):** Rp 500.000/bulan dengan kapasitas ~55 SKU/bulan
-diterima sebagai baseline MVP — kualitas visual (background mewah &
-bervariasi di setiap produk) diprioritaskan di atas volume. Budget bisa
-dinaikkan belakangan kalau target volume perlu naik lagi.
+Sejak Agustus 2026 (§18), SEMUA panggilan AI berbayar tercatat di
+`ai_cost_log` (Content Studio) dan kolom `total_cost`/`video_cost`
+(Generate/History), dijumlah akurat di Dashboard per bulan & sepanjang
+waktu, dengan rincian per fitur. Untuk angka tagihan pasti (bukan
+estimasi), rujukan utamanya tetap dashboard billing fal.ai sendiri —
+aplikasi ini menghitung berdasarkan harga yang diketahui publik dan
+`usage.cost` yang dilaporkan fal.ai sendiri untuk text-gen, tapi tidak
+menggantikan invoice resmi fal.ai.
 
 ## Biaya lain
 
 | Item | Estimasi |
 | --- | --- |
-| ChatGPT Plus (opsional, bantu prompt engineering) | Rp 350.000 |
-| Supabase | **Rp 0 tambahan** (revisi v0.4 — pakai project Deera yang sudah ada/dibayar, bukan project baru; kalau tabel baru mendorong Deera naik tier, itu biaya bersama, bukan biaya AI Studio sendiri) |
-| Cloudinary | **Rp 0 tambahan** (pakai akun Cloudinary Deera yang sudah ada; perlu dipantau supaya kuota bulanan Cloudinary Deera tidak jebol karena tambahan gambar AI) |
+| Supabase | Rp 0 tambahan (project Deera yang sudah ada) |
+| Cloudinary | Rp 0 tambahan (akun Deera yang sudah ada) |
+| Instagram Graph API | Gratis (butuh App Review Meta, proses 2-4 minggu) |
 | Domain | Rp 20.000 |
 
-## Catatan penting
+---
 
-* Video AI **tidak termasuk** dalam estimasi ini — akan dihitung ulang saat
-  masuk fase V2, karena biaya video (Kling ~$0.03–0.14/detik) signifikan lebih
-  mahal per unit dibanding gambar.
-* Spesifikasi komputer Denny (Intel i5-12400F, 16GB RAM, NVIDIA RTX 3060 Ti
-  8GB VRAM, Windows 11) tidak memengaruhi biaya ini — semua proses AI berat
-  berjalan di cloud Fal.ai, bukan di komputer lokal. GPU lokal ini sebenarnya
-  cukup untuk menjalankan FLUX versi quantized secara mandiri (gratis, tapi
-  jauh lebih lambat & perlu setup teknis ComfyUI) — opsi ini disimpan sebagai
-  pertimbangan masa depan kalau volume produksi sudah sangat besar, bukan
-  untuk MVP.
+# 21. Definition of Done (MVP — status: TERCAPAI)
+
+* Admin dapat login. ✅
+* Admin dapat kelola model, pose, preset background/aksesoris (dengan
+  gambar referensi yang bisa diedit belakangan). ✅
+* Admin dapat upload produk (foto flat-lay, termasuk slot Detail Tangan
+  terpisah). ✅
+* Generate menghasilkan set foto lengkap dengan background sesuai
+  pilihan dan warna kerudung/heels otomatis mengikuti produk. ✅
+* Admin dapat generate video cerita gabungan dari foto-foto hasil. ✅
+* Hasil tersimpan di Supabase, dikelompokkan per SKU, dengan
+  pagination+search. ✅
+* Admin dapat publish set terpilih ke katalog Deera. ✅
+* Admin dapat generate & publish konten Instagram lewat Content Studio. ✅
+* Biaya generate tercatat AKURAT (semua fitur, bukan cuma sebagian) dan
+  tampil di Dashboard. ✅
 
 ---
 
-# 21. Definition of Done (MVP)
+# 22. Riwayat Keputusan (arsip — v0.1 sampai v0.5, sebelum implementasi)
 
-MVP dianggap selesai jika:
-* Admin dapat login.
-* Admin dapat upload foto model referensi (langsung siap pakai, tanpa
-  training).
-* Admin dapat upload pose, dan mengisi minimal 15-20 background preset +
-  aksesoris preset (§7.4).
-* Admin dapat upload produk (foto flat-lay).
-* Generate berhasil menghasilkan **satu set foto lengkap** (utama + 3 detail +
-  seri jika ada) dengan background bervariasi (mode Auto: preset atau
-  improvisasi) dan warna kerudung/heels otomatis mengikuti warna produk.
-* Hasil tersimpan di Supabase (project sama dengan Deera), dikelompokkan per SKU.
-* Hasil dapat diunduh (per gambar atau seluruh set).
-* Admin dapat publish set terpilih ke katalog Deera (Cloudinary +
-  `products.image`/`detail`/`video`) dan melihat status publish di history.
-* Riwayat generate tampil di dashboard, dikelompokkan per produk.
-* Biaya generate tercatat per set untuk kontrol budget bulanan.
+Bagian ini adalah **arsip historis** dari proses perencanaan sebelum
+development dimulai — dipertahankan untuk konteks "kenapa" sebuah
+keputusan pernah diambil, BUKAN deskripsi keadaan sekarang (lihat §1-§21
+untuk itu).
 
----
-
-# 22. Keputusan (sebelumnya "Open Questions" di v0.1)
-
-| Pertanyaan | Keputusan |
+| Revisi | Perubahan utama |
 | --- | --- |
-| Apakah satu produk boleh punya banyak output? | Ya — satu produk menghasilkan satu **set** (5 gambar: utama, 3 detail, seri). Riwayat dikelompokkan per SKU lewat `product_kode`. |
-| Apakah perlu watermark otomatis? | Tidak untuk MVP — foto dipakai untuk upload sendiri ke marketplace, bukan dibagikan publik sebelum final. Bisa jadi opsi toggle di V2. |
-| Apakah hasil langsung di-resize ke format marketplace? | Tidak untuk MVP — masuk roadmap V3 ("multi-size output"). |
-| Apakah background hanya studio putih pada MVP? | **Direvisi dari v0.1** — background bervariasi lewat sistem preset (§7.4), disesuaikan gaya produk, bukan dikunci ke satu opsi. **Diperkuat lagi di v0.5**: karena tidak mau background "itu-itu saja", sistem sekarang punya library besar (15-20+ preset) + mode AI Improvisasi yang dicampur otomatis (mode Auto), bukan cuma 3 preset seperti draft awal. Konsekuensinya tahap 2 jadi default aktif untuk semua produk (lihat baris budget di bawah). |
-| Apakah perlu approval sebelum hasil bisa diunduh? | Tidak untuk MVP — status `completed` sudah cukup sebagai sinyal siap unduh. Approval workflow butuh multi-user role yang di luar scope MVP. |
-| Bagaimana menjaga wajah model konsisten? | **v0.2:** training LoRA per model. **Direvisi di v0.3** setelah riset — pakai FLUX VTO yang mempertahankan orang di foto input apa adanya, jadi cukup foto referensi biasa, tanpa training sama sekali. Lebih murah, lebih cepat setup. |
-| Apakah video masuk MVP? | Tidak — ditunda ke V2 setelah workflow foto stabil dan budget bertambah. |
-| Mesin AI mana yang dipakai untuk menjaga fidelitas produk? | **Baru di v0.3, hasil riset perbandingan** — FLUX Virtual Try-On (Black Forest Labs) dipakai sebagai mesin utama tahap 1, karena purpose-built untuk kasus ini (bukan model editing serba guna seperti Kontext Pro). FLUX Kontext Pro/Nano Banana jadi tahap 2 untuk background & aksesoris — **default aktif sejak v0.5** (semula opsional di v0.3/v0.4). Lihat §9. |
-| Dari mana sumber foto pose untuk model AI, kalau tidak foto ulang? | **Baru, hasil diskusi** — pakai foto katalog lama dari vendor sebagai pose library awal, karena Deera punya hak pakai penuh atas foto-foto tersebut. Pose kini terikat per model (`poses.model_id`, lihat §7.3 & §12) karena FLUX VTO menyatukan identitas model dan pose dalam satu foto. Pose baru (real/AI-generated) hanya ditambah kalau perlu variasi di luar arsip lama. |
-| 3 foto detail per produk — pakai foto asli atau digenerate AI? | **Baru, hasil diskusi** — tetap digenerate AI dengan model memakainya (bukan foto produk polos), supaya seluruh set konsisten satu gaya visual. Foto close-up asli tetap dipakai sebagai referensi tambahan ke FLUX VTO untuk menjaga presisi tekstur (§7.6). Admin disarankan review lebih teliti untuk produk dengan motif bordir sangat rapat. |
-| Database tabel baru AI Fashion Studio ditaruh di mana? | **Baru v0.4, hasil diskusi** — di project Supabase Deera yang sudah ada (bukan project terpisah), karena data produk (kode, warna) memang perlu dipakai bersama dan hasil generate perlu dipush balik ke katalog Deera. `generation_sets.product_kode` jadi foreign key asli ke `products.kode`. Lihat §10 & §12. |
-| Bagaimana cakupan aksesoris (kerudung, heels, cincin, tas, kalung, anting)? | **Baru v0.4, hasil diskusi** — kerudung & heels tetap otomatis mengikuti warna produk (tanpa pilihan gaya). Tas, kalung, cincin, anting jadi preset opsional berkategori yang bisa dipilih admin (`accessory_presets.category`). Lihat §7.4 & §12. |
-| Background pakai library terkurasi, AI improvisasi, atau kombinasi? | **Baru v0.5, hasil diskusi** — kombinasi keduanya (mode Auto default): library 15-20+ preset mewah dengan auto-rotasi/matching, dicampur dengan mode AI Improvisasi (komposisi prompt dinamis dari material/mood/setting/warna, tanpa panggilan LLM tambahan). Lihat §7.4. |
-| Tahap 2 jadi default aktif — bagaimana dengan kapasitas budget Rp 500rb/bulan? | **Baru v0.5, hasil diskusi** — diterima turun ke ~55 SKU/bulan (dari perkiraan 80-100 di v0.3/v0.4), sebagai keputusan sadar memprioritaskan kualitas visual di atas volume. Bisa naik lagi ke ~100 SKU/bulan kalau budget ditambah ke ~Rp 900rb/bulan. Lihat §3 & §20. |
+| v0.1 | Draft awal — training LoRA per model, background studio putih terkunci, video termasuk MVP. |
+| v0.2 | Satu generate = satu SET foto (bukan 1 gambar), background mulai bervariasi lewat preset, video ditunda ke fase 2. |
+| v0.3 | Pivot mesin utama ke FLUX Virtual Try-On (Black Forest Labs) menggantikan LoRA — tidak perlu training, FLUX Kontext Pro jadi tahap 2 opsional untuk background/aksesoris. |
+| v0.4 | Tabel baru ditaruh di project Supabase Deera yang sudah ada (bukan project terpisah) supaya bisa foreign-key ke `products` dan publish balik. Aksesoris diperluas (tas/kalung/cincin/anting jadi preset, kerudung/heels tetap auto-warna). |
+| v0.5 | Background dirombak jadi dua mode (preset terkurasi 15-20+ + AI improvisasi, dicampur mode Auto) — tahap 2 (edit background) jadi default aktif untuk semua produk, bukan opsional lagi. Kapasitas budget diturunkan demi kualitas visual. |
+| **v1.0 (dokumen ini, pasca-implementasi)** | **Pivot terbesar**: mesin utama diganti total dari FLUX VTO+Kontext 2-tahap menjadi **Nano Banana Pro single-stage** (§9) setelah tes manual pemilik brand membuktikan akurasi motif/tekstur jauh lebih baik. Video AI **dipindah dari "V2" ke live di V1** (§7.8). **Content Studio ditambahkan** sepenuhnya di luar rencana awal (§7.9). Desain visual dirombak dari rencana "light mode gold" jadi dark glassmorphism. Pencatatan biaya terpusat (`ai_cost_log`) ditambahkan setelah ditemukan gap nyata antara biaya top-up fal.ai admin dan angka yang tercatat di Dashboard versi lama (§18, §20). |
+
+Keputusan detail per topik (model AI, sumber foto pose, cakupan
+aksesoris, lokasi database, dst) yang relevan dengan arsitektur v0.1-v0.5
+tetap berlaku sebagai konteks historis kecuali disebutkan berubah di
+tabel di atas atau di §1-§21.
 
 ---
 
 # 23. Lampiran
 
-## Naming Convention Produk
+## Naming convention file (SUDAH TIDAK RELEVAN)
 
-```text
-AGM-001-front.jpg
-AGM-001-back.jpg
-AGM-001-detail-neck.jpg
-AGM-001-detail-sleeve.jpg
-```
-
-## Naming Convention Pose
-
-```text
-POSE-01-front.png
-POSE-02-walk.png
-POSE-03-side.png
-```
-
-## Naming Convention Hasil Generate (baru)
-
-```text
-{generation_set_id}-utama.jpg
-{generation_set_id}-detail-1.jpg
-{generation_set_id}-detail-2.jpg
-{generation_set_id}-detail-3.jpg
-{generation_set_id}-seri.jpg
-```
+Rencana awal (v0.1-v0.5) mengasumsikan admin mengikuti naming convention
+file lokal (`AGM-{kode}-front.jpg`, dst) sebelum upload. Ini **tidak lagi
+berlaku** — upload sekarang lewat dropzone drag & drop langsung dari
+browser ke Supabase Storage (`react-dropzone`), nama file asli tidak
+dipakai sebagai metadata, semua konteks (role foto, kode produk, dst)
+disimpan lewat struktur data (`product_images` di `ai_generation_sets`),
+bukan lewat nama file.

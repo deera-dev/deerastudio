@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Camera, Plus, Trash2 } from "lucide-react";
+import { Camera, Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -16,6 +16,11 @@ import type { AiModel, AiPose } from "@/types/database";
 
 // Poses — terikat ke model_id (PRD §7.3 v0.3). Boleh diisi dari arsip foto
 // katalog vendor lama (Deera punya hak pakai penuh, sudah dikonfirmasi).
+//
+// REVISI Agustus 2026 v2: upload foto referensi di form "Tambah Pose"
+// dikecilkan & ditaruh kiri (flex-between, bukan full-width lagi), + mode
+// edit inline per-card (sebelumnya cuma bisa aktifkan/nonaktifkan/hapus,
+// salah upload foto = hapus & mulai dari nol).
 const SOURCE_OPTIONS: { value: AiPose["source"]; label: string }[] = [
   { value: "vendor_archive", label: "Arsip vendor lama" },
   { value: "new_shoot", label: "Foto baru" },
@@ -33,6 +38,13 @@ export default function PosesPage() {
   const [source, setSource] = useState<AiPose["source"]>("vendor_archive");
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editSource, setEditSource] = useState<AiPose["source"]>("vendor_archive");
+  const [editReferenceUrl, setEditReferenceUrl] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     async function loadModels() {
@@ -117,6 +129,41 @@ export default function PosesPage() {
     loadPoses(selectedModelId);
   }
 
+  function startEdit(pose: AiPose) {
+    setEditingId(pose.id);
+    setEditName(pose.name);
+    setEditDescription(pose.description ?? "");
+    setEditSource(pose.source);
+    setEditReferenceUrl(pose.reference_image_url);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(pose: AiPose) {
+    if (!editName.trim() || !editReferenceUrl) return;
+    setSavingEdit(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("ai_poses")
+      .update({
+        name: editName.trim(),
+        description: editDescription.trim() || null,
+        source: editSource,
+        reference_image_url: editReferenceUrl,
+      })
+      .eq("id", pose.id);
+    setSavingEdit(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Pose diperbarui");
+    setEditingId(null);
+    loadPoses(selectedModelId);
+  }
+
   return (
     <AppShell>
       <PageHeader
@@ -153,47 +200,54 @@ export default function PosesPage() {
               <CardTitle>Tambah Pose</CardTitle>
             </CardHeader>
             <CardBody>
+              {/* REVISI v2: upload dikecilkan & ditaruh kiri (flex-between). */}
               <form onSubmit={handleAdd} className="flex flex-col gap-4">
-                <div>
-                  <Label htmlFor="pose-name">Nama Pose</Label>
-                  <Input
-                    id="pose-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="mis. Berdiri depan, tangan di pinggang"
-                  />
+                <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
+                  <div className="w-full sm:w-40 sm:shrink-0">
+                    <ImageUploadField
+                      label="Foto Referensi Pose"
+                      folder="poses"
+                      value={referenceUrl}
+                      onChange={setReferenceUrl}
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-4">
+                    <div>
+                      <Label htmlFor="pose-name">Nama Pose</Label>
+                      <Input
+                        id="pose-name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="mis. Berdiri depan, tangan di pinggang"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="pose-source">Sumber Foto</Label>
+                      <Select
+                        id="pose-source"
+                        value={source}
+                        onChange={(e) => setSource(e.target.value as AiPose["source"])}
+                      >
+                        {SOURCE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="pose-desc">Catatan (opsional)</Label>
+                      <Textarea
+                        id="pose-desc"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="mis. cocok untuk produk gamis longgar"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="pose-source">Sumber Foto</Label>
-                  <Select
-                    id="pose-source"
-                    value={source}
-                    onChange={(e) => setSource(e.target.value as AiPose["source"])}
-                  >
-                    {SOURCE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="pose-desc">Catatan (opsional)</Label>
-                  <Textarea
-                    id="pose-desc"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="mis. cocok untuk produk gamis longgar"
-                    rows={2}
-                  />
-                </div>
-                <ImageUploadField
-                  label="Foto Referensi Pose"
-                  folder="poses"
-                  value={referenceUrl}
-                  onChange={setReferenceUrl}
-                  required
-                />
                 <Button type="submit" loading={saving} disabled={!name.trim() || !referenceUrl}>
                   <Plus className="h-4 w-4" />
                   Tambah Pose
@@ -212,47 +266,115 @@ export default function PosesPage() {
               </Card>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {poses.map((pose, i) => (
-                  <motion.div
-                    key={pose.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, delay: i * 0.03 }}
-                  >
-                    <Card className="overflow-hidden">
-                      <div className="aspect-[3/4] w-full bg-surface-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={pose.reference_image_url}
-                          alt={pose.name}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <CardBody>
-                        <div className="mb-1 font-medium text-text">{pose.name}</div>
-                        <div className="mb-2 text-xs text-text-faint">
-                          {SOURCE_OPTIONS.find((o) => o.value === pose.source)?.label}
-                        </div>
-                        {pose.description && (
-                          <p className="mb-3 text-xs text-text-muted">{pose.description}</p>
+                {poses.map((pose, i) => {
+                  const isEditing = editingId === pose.id;
+                  return (
+                    <motion.div
+                      key={pose.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, delay: i * 0.03 }}
+                    >
+                      <Card className="overflow-hidden">
+                        {isEditing ? (
+                          <CardBody className="flex flex-col gap-3">
+                            <div className="w-32">
+                              <ImageUploadField
+                                label="Foto Referensi"
+                                folder="poses"
+                                value={editReferenceUrl}
+                                onChange={setEditReferenceUrl}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`edit-pose-name-${pose.id}`}>Nama Pose</Label>
+                              <Input
+                                id={`edit-pose-name-${pose.id}`}
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`edit-pose-source-${pose.id}`}>Sumber Foto</Label>
+                              <Select
+                                id={`edit-pose-source-${pose.id}`}
+                                value={editSource}
+                                onChange={(e) => setEditSource(e.target.value as AiPose["source"])}
+                              >
+                                {SOURCE_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                            <div>
+                              <Label htmlFor={`edit-pose-desc-${pose.id}`}>Catatan (opsional)</Label>
+                              <Textarea
+                                id={`edit-pose-desc-${pose.id}`}
+                                value={editDescription}
+                                onChange={(e) => setEditDescription(e.target.value)}
+                                rows={2}
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                loading={savingEdit}
+                                disabled={!editName.trim() || !editReferenceUrl}
+                                onClick={() => saveEdit(pose)}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Simpan
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={cancelEdit}>
+                                <X className="h-3.5 w-3.5" />
+                                Batal
+                              </Button>
+                            </div>
+                          </CardBody>
+                        ) : (
+                          <>
+                            <div className="aspect-[3/4] w-full bg-surface-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={pose.reference_image_url}
+                                alt={pose.name}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            <CardBody>
+                              <div className="mb-1 font-medium text-text">{pose.name}</div>
+                              <div className="mb-2 text-xs text-text-faint">
+                                {SOURCE_OPTIONS.find((o) => o.value === pose.source)?.label}
+                              </div>
+                              {pose.description && (
+                                <p className="mb-3 text-xs text-text-muted">{pose.description}</p>
+                              )}
+                              <div className="mb-3">
+                                <Badge tone={pose.is_active ? "success" : "muted"}>
+                                  {pose.is_active ? "Aktif" : "Nonaktif"}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Button variant="outline" size="sm" onClick={() => toggleActive(pose)}>
+                                  {pose.is_active ? "Nonaktifkan" : "Aktifkan"}
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => startEdit(pose)}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="danger" size="sm" onClick={() => handleDelete(pose)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </CardBody>
+                          </>
                         )}
-                        <div className="mb-3">
-                          <Badge tone={pose.is_active ? "success" : "muted"}>
-                            {pose.is_active ? "Aktif" : "Nonaktif"}
-                          </Badge>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => toggleActive(pose)}>
-                            {pose.is_active ? "Nonaktifkan" : "Aktifkan"}
-                          </Button>
-                          <Button variant="danger" size="sm" onClick={() => handleDelete(pose)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </CardBody>
-                    </Card>
-                  </motion.div>
-                ))}
+                      </Card>
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
           </div>

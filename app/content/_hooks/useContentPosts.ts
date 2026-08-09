@@ -1,11 +1,19 @@
 "use client";
 // Daftar semua konten (draft/scheduled/published/failed) + edit caption,
 // jadwal, publish ke Instagram, hapus, salin, download foto.
+//
+// REVISI Agustus 2026 v2 (feedback admin: "dibuat pagination aja ya,
+// nanti makin banyak malah susah liatnya, dan bikin search juga ya") —
+// sebelumnya .limit(100) TANPA search sama sekali. Sekarang pagination +
+// search kode produk SERVER-SIDE lewat .range()/.ilike() + count:"exact",
+// sama pola dengan app/history/page.tsx.
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import type { ContentPost } from "@/types/database";
+
+const PAGE_SIZE = 10;
 
 export function useContentPosts() {
   const [posts, setPosts] = useState<ContentPost[]>([]);
@@ -16,6 +24,12 @@ export function useContentPosts() {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [instagramConfigured, setInstagramConfigured] = useState(false);
 
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
   useEffect(() => {
     fetch("/api/content/instagram-status")
       .then((r) => r.json())
@@ -23,21 +37,36 @@ export function useContentPosts() {
       .catch(() => setInstagramConfigured(false));
   }, []);
 
-  async function loadPosts() {
+  async function loadPosts(searchTerm = search, pageIndex = page) {
     setLoadingPosts(true);
     const supabase = createClient();
-    const { data } = await supabase
+    let query = supabase
       .from("content_posts")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
+    if (searchTerm.trim()) {
+      query = query.ilike("product_kode", `%${searchTerm.trim()}%`);
+    }
+    const from = pageIndex * PAGE_SIZE;
+    const { data, count } = await query.range(from, from + PAGE_SIZE - 1);
     setPosts((data as ContentPost[]) ?? []);
+    setTotalCount(count ?? 0);
     setLoadingPosts(false);
   }
 
+  // Debounce ketikan search -> reset ke halaman 0.
   useEffect(() => {
-    loadPosts();
-  }, []);
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    loadPosts(search, page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, page]);
 
   function startEdit(post: ContentPost) {
     setEditingId(post.id);
@@ -153,5 +182,13 @@ export function useContentPosts() {
     handleDelete,
     copyCaption,
     downloadImage,
+    // Search + pagination (REVISI v2)
+    searchInput,
+    setSearchInput,
+    search,
+    page,
+    setPage,
+    totalCount,
+    totalPages,
   };
 }

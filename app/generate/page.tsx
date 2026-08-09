@@ -29,8 +29,26 @@ import type {
 // beberapa menit (lihat catatan di app/api/generate-set/route.ts).
 //
 // REVISI setelah feedback pertama: pose & produk sekarang dipilih lewat
-// grid gambar (bukan dropdown teks / ketik kode), dan jumlah foto detail
-// bisa diatur (default 2 = total 3 foto) supaya biaya lebih murah.
+// grid gambar (bukan dropdown teks / ketik kode).
+//
+// REVISI #7 (Agustus 2026, "4 foto tetap") — admin kirim referensi lookbook
+// nyata & minta generate SELALU menghasilkan 4 foto tetap: Utama, Angle
+// (badan penuh dari pose lain), Kolase Gabungan (potret+badan penuh + logo
+// brand), Kolase Detail (foto utama + 2 close-up berlabel DETAIL + logo
+// brand) — lihat app/api/generate-set/route.ts & lib/image-template/
+// set-collage.tsx. Kontrol jumlah foto (angle 0-3, close-up 0-3) DIHAPUS
+// total, dan close-up tidak lagi bisa diatur admin (selalu 2 crop
+// tersembunyi yang jadi bahan Kolase Detail, tidak disimpan sbg baris
+// sendiri). Kolase 3 & 4 tidak menambah biaya fal.ai (compositing lokal).
+//
+// REVISI #8 (Agustus 2026, segera setelah #7 — admin: "ini kita ambil angle
+// belakang aja ya jadinya" / "jadi ga pilih pose lagi"): #7 sempat wajibkan
+// admin pilih pose kedua utk "angle" (mirip cara pilih pose utama) —
+// TERNYATA bukan itu maksudnya. "Angle" disederhanakan jadi otomatis
+// BELAKANG, TIDAK ADA lagi picker pose kedua sama sekali — cukup pilih 1
+// pose (langkah 1), backend otomatis generate foto ke-2 dari sisi belakang
+// model (lihat isBackView di lib/prompts/nano-banana-generate.ts &
+// app/api/generate-set/route.ts).
 
 type ProductRow = {
   kode: string;
@@ -44,6 +62,7 @@ type ProductImages = {
   back: string | null;
   detailNeck: string | null;
   detailSleeve: string | null;
+  detailHand: string | null; // close-up pergelangan/manset tangan — BEDA dari detailSleeve (lengan/bahu)
   detailChest: string | null;
   detailHem: string | null;
   fullBody: string | null;
@@ -82,18 +101,31 @@ const STEPS = [
 // (1 pemanggilan, $0.15/gambar @ resolusi 1K) — lihat lib/prompts/
 // nano-banana-generate.ts & app/api/generate-set/route.ts.
 const COST_UTAMA = 2700; // 1x Nano Banana Pro (sudah termasuk background)
-const COST_ANGLE = 2700; // pose beda -> panggilan independen lagi, sama mahal spt utama
-const COST_DERIVED = 640; // detail -> diturunkan dari utama, cuma 1x Kontext
+const COST_ANGLE = 2700; // foto belakang (isBackView) -> panggilan independen lagi, sama mahal spt utama
+const COST_DERIVED = 640; // 1x crop Kontext tersembunyi (bahan Kolase Detail)
 // REVISI FINAL: "seri" sekarang generate PENUH pakai foto asli warna itu
 // (bukan recolor tebakan AI) -> sama mahalnya dengan angle, BUKAN lagi 640.
 const COST_SERI = COST_ANGLE;
+// REVISI #7 — "4 foto tetap": tiap set SELALU 1 utama + 1 angle (wajib) + 2
+// crop close-up tersembunyi (bahan Kolase Detail, tidak disimpan sbg baris
+// sendiri) + 2 kolase (compositing lokal, cost 0). Seri warna tetap fitur
+// terpisah/opsional di luar 4 foto tetap ini.
+const FIXED_SET_COST = COST_UTAMA + COST_ANGLE + COST_DERIVED * 2;
+
+const ROLE_LABELS: Record<string, string> = {
+  utama: "Utama",
+  angle: "Angle (Belakang)",
+  seri: "Seri Warna",
+  kolase_gabungan: "Kolase Gabungan",
+  kolase_detail: "Kolase Detail",
+  detail: "Detail (lama)",
+};
 
 export default function GeneratePage() {
   const [models, setModels] = useState<AiModel[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("");
   const [poses, setPoses] = useState<AiPose[]>([]);
   const [selectedPoseId, setSelectedPoseId] = useState("");
-  const [angleposeIds, setAnglePoseIds] = useState<string[]>([]);
 
   const [productQuery, setProductQuery] = useState("");
   const [productResults, setProductResults] = useState<ProductRow[]>([]);
@@ -110,6 +142,7 @@ export default function GeneratePage() {
     back: null,
     detailNeck: null,
     detailSleeve: null,
+    detailHand: null,
     detailChest: null,
     detailHem: null,
     fullBody: null,
@@ -121,8 +154,6 @@ export default function GeneratePage() {
 
   const [accessoryPresets, setAccessoryPresets] = useState<AccessoryPresetRow[]>([]);
   const [selectedAccessoryIds, setSelectedAccessoryIds] = useState<string[]>([]);
-
-  const [detailCount, setDetailCount] = useState(1);
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<GenerationSetResult | null>(null);
@@ -160,7 +191,6 @@ export default function GeneratePage() {
       const rows = (data as AiPose[]) ?? [];
       setPoses(rows);
       setSelectedPoseId(rows.length > 0 ? rows[0].id : "");
-      setAnglePoseIds([]);
     }
     loadPoses();
   }, [selectedModelId]);
@@ -208,24 +238,16 @@ export default function GeneratePage() {
     );
   }
 
-  function toggleAnglePose(id: string) {
-    setAnglePoseIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 3 ? [...prev, id] : prev
-    );
-  }
-
   const step1Done = !!selectedModelId && !!selectedPoseId;
   const step2Done = !!selectedProduct;
   const step3Done = !!productImages.front;
   const canSubmit = step1Done && step2Done && step3Done && !submitting;
 
   const validSeriEntries = seriEntries.filter((e) => e.image);
-  const totalPhotos = 1 + angleposeIds.length + detailCount + validSeriEntries.length;
-  const estimatedCost =
-    COST_UTAMA +
-    angleposeIds.length * COST_ANGLE +
-    detailCount * COST_DERIVED +
-    validSeriEntries.length * COST_SERI;
+  // REVISI #7 — total foto SELALU 4 (utama, angle, kolase gabungan, kolase
+  // detail) + seri warna opsional (fitur terpisah, lihat catatan atas file).
+  const totalPhotos = 4 + validSeriEntries.length;
+  const estimatedCost = FIXED_SET_COST + validSeriEntries.length * COST_SERI;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -251,17 +273,16 @@ export default function GeneratePage() {
             back: productImages.back ?? undefined,
             detailNeck: productImages.detailNeck ?? undefined,
             detailSleeve: productImages.detailSleeve ?? undefined,
+            detailHand: productImages.detailHand ?? undefined,
             detailChest: productImages.detailChest ?? undefined,
             detailHem: productImages.detailHem ?? undefined,
             fullBody: productImages.fullBody ?? undefined,
           },
-          anglePoseIds: angleposeIds,
           productWarna: productWarna || undefined,
           seriEntries: validSeriEntries.map((e) => ({
             warna: e.warna,
             image: e.image,
           })),
-          detailCount,
         }),
       });
       const data = await res.json();
@@ -352,10 +373,7 @@ export default function GeneratePage() {
                           <button
                             type="button"
                             key={pose.id}
-                            onClick={() => {
-                              setSelectedPoseId(pose.id);
-                              setAnglePoseIds((prev) => prev.filter((id) => id !== pose.id));
-                            }}
+                            onClick={() => setSelectedPoseId(pose.id)}
                             className={cn(
                               "group relative overflow-hidden rounded-md border-2 text-left transition-colors",
                               active ? "border-gold" : "border-transparent hover:border-border-strong"
@@ -384,58 +402,14 @@ export default function GeneratePage() {
                   )}
                 </div>
 
-                {poses.length > 1 && (
-                  <div>
-                    <Label>
-                      Foto angle lain (opsional — badan penuh dari pose berbeda, maks 3)
-                    </Label>
-                    <div className="grid max-h-56 grid-cols-3 gap-2 overflow-y-auto rounded-md border border-border p-2 sm:grid-cols-4">
-                      {poses
-                        .filter((p) => p.id !== selectedPoseId)
-                        .map((pose) => {
-                          const active = angleposeIds.includes(pose.id);
-                          const disabled = !active && angleposeIds.length >= 3;
-                          return (
-                            <button
-                              type="button"
-                              key={pose.id}
-                              onClick={() => toggleAnglePose(pose.id)}
-                              disabled={disabled}
-                              className={cn(
-                                "group relative overflow-hidden rounded-md border-2 text-left transition-colors disabled:opacity-30",
-                                active
-                                  ? "border-gold-dark"
-                                  : "border-transparent hover:border-border-strong"
-                              )}
-                            >
-                              <div className="aspect-[3/4] w-full bg-surface-2">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={pose.reference_image_url}
-                                  alt={pose.name}
-                                  className="h-full w-full object-cover"
-                                />
-                              </div>
-                              {active && (
-                                <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gold-dark text-ink">
-                                  <Check className="h-3 w-3" />
-                                </span>
-                              )}
-                              <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1.5 py-1 text-[10px] leading-tight text-white">
-                                {pose.name}
-                              </span>
-                            </button>
-                          );
-                        })}
-                    </div>
-                    {angleposeIds.length > 0 && (
-                      <FieldHint>
-                        {angleposeIds.length} pose angle terpilih — tiap foto angle butuh proses
-                        Virtual Try-On sendiri (±Rp1.400/foto).
-                      </FieldHint>
-                    )}
-                  </div>
-                )}
+                {/* REVISI #8 — tidak ada lagi picker pose kedua. Foto Angle
+                    otomatis dibuat dari sisi belakang model, pakai pose yang
+                    sama dipilih di atas (lihat catatan REVISI #8 di atas
+                    file). */}
+                <div className="rounded-md border border-border-strong bg-surface-2 px-3.5 py-2.5 text-xs text-text-muted">
+                  Foto ke-2 (Angle) otomatis dibuat dari sisi <span className="font-medium text-text">belakang</span> model
+                  memakai pose yang sama di atas — tidak perlu pilih pose lagi.
+                </div>
               </>
             )}
           </CardBody>
@@ -647,6 +621,13 @@ export default function GeneratePage() {
                 onChange={(url) => setProductImages((p) => ({ ...p, detailSleeve: url }))}
               />
               <ImageUploadField
+                label="Detail Tangan"
+                folder="products"
+                value={productImages.detailHand}
+                onChange={(url) => setProductImages((p) => ({ ...p, detailHand: url }))}
+                hint="Manset/pergelangan tangan — beda dari Detail Lengan (bahu/lengan atas)"
+              />
+              <ImageUploadField
                 label="Detail Bagian Bawah"
                 folder="products"
                 value={productImages.detailHem}
@@ -733,16 +714,34 @@ export default function GeneratePage() {
                       key={a.id}
                       onClick={() => toggleAccessory(a.id)}
                       className={cn(
-                        "rounded-full border px-3.5 py-1.5 text-xs transition-colors",
+                        "flex items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3.5 text-xs transition-colors",
                         active
                           ? "border-gold bg-gold/10 text-gold-soft"
                           : "border-border-strong text-text-muted hover:border-border-strong/80"
                       )}
                     >
-                      <span className="text-text-faint">
-                        [{ACCESSORY_CATEGORY_LABELS[a.category]}]
-                      </span>{" "}
-                      {a.name}
+                      {/* REVISI Agustus 2026 v2 (feedback admin: "ga ada
+                          image nya, jadi ga tau bentuknya") — thumbnail
+                          kecil kalau preset ini punya reference_image_url,
+                          kalau tidak fallback ke ikon generik. */}
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2">
+                        {a.reference_image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={a.reference_image_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <ImageIcon className="h-3 w-3 text-text-faint" />
+                        )}
+                      </span>
+                      <span>
+                        <span className="text-text-faint">
+                          [{ACCESSORY_CATEGORY_LABELS[a.category]}]
+                        </span>{" "}
+                        {a.name}
+                      </span>
                     </button>
                   );
                 })}
@@ -753,39 +752,35 @@ export default function GeneratePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>6. Jumlah Foto Close-Up</CardTitle>
+            <CardTitle>6. Ringkasan Set Foto</CardTitle>
           </CardHeader>
           <CardBody>
             <p className="mb-3 text-sm text-text-muted">
-              Foto utama selalu dibuat, dan foto angle (kalau dipilih di atas) selalu badan penuh.
-              Yang bisa diatur di sini cuma foto close-up (zoom kerah/lengan/tekstur) yang
-              diturunkan dari foto utama — makin sedikit, makin murah.
+              Tiap generate SELALU menghasilkan 4 foto tetap — tidak bisa diatur/dikurangi:
             </p>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="text-sm text-text-muted">Foto close-up:</span>
-              {[0, 1, 2, 3].map((n) => (
-                <button
-                  type="button"
-                  key={n}
-                  onClick={() => setDetailCount(n)}
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full border text-sm transition-colors",
-                    detailCount === n
-                      ? "border-gold bg-gold text-ink"
-                      : "border-border-strong text-text-muted hover:border-gold/60"
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
+            <ul className="mb-4 flex flex-col gap-1.5 text-sm text-text-muted">
+              <li>
+                <span className="font-medium text-text">1. Utama</span> — badan penuh, pose utama.
+              </li>
+              <li>
+                <span className="font-medium text-text">2. Angle (Belakang)</span> — badan penuh,
+                otomatis dari sisi belakang model, pose sama dgn Utama.
+              </li>
+              <li>
+                <span className="font-medium text-text">3. Kolase Gabungan</span> — potret + badan
+                penuh berdampingan, logo brand (disusun otomatis, gratis).
+              </li>
+              <li>
+                <span className="font-medium text-text">4. Kolase Detail</span> — foto utama +
+                2 close-up berlabel DETAIL, logo brand (disusun otomatis, gratis).
+              </li>
+            </ul>
             <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface-2 px-4 py-3">
               <Badge tone="gold">{totalPhotos} foto total</Badge>
               <span className="text-sm text-text-muted">
-                1 utama
-                {angleposeIds.length > 0 && ` + ${angleposeIds.length} angle`}
-                {detailCount > 0 && ` + ${detailCount} close-up`}
-                {validSeriEntries.length > 0 && ` + ${validSeriEntries.length} seri warna`} · Estimasi biaya:{" "}
+                4 foto tetap
+                {validSeriEntries.length > 0 && ` + ${validSeriEntries.length} seri warna`} ·
+                Estimasi biaya:{" "}
                 <span className="font-medium text-text">
                   Rp {estimatedCost.toLocaleString("id-ID")}
                 </span>
@@ -850,7 +845,9 @@ export default function GeneratePage() {
                         </div>
                       )}
                       <div className="p-2">
-                        <div className="text-xs font-medium capitalize text-text">{gen.image_role}</div>
+                        <div className="text-xs font-medium text-text">
+                          {ROLE_LABELS[gen.image_role] ?? gen.image_role}
+                        </div>
                         <div className="text-xs text-text-faint">{gen.status}</div>
                       </div>
                     </div>

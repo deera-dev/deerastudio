@@ -17,6 +17,13 @@
 // suggestHeadline() di content-generate.ts, yang juga sudah direvisi utk
 // menyarankan MOMEN NARATIF, bukan cuma deskripsi ruangan kosong.
 import { fal, FAL_MODELS } from "../fal/client";
+import { logAiCost } from "../cost-log";
+
+// Nano Banana Pro edit, resolusi 1K — fal.ai TIDAK mengembalikan usage.cost
+// utk endpoint image-gen ini (beda dari text-gen router), jadi dicatat pakai
+// harga tetap yang SAMA dgn konstanta COST_FULL_PASS di
+// app/api/generate-set/route.ts ($0.15/panggilan, lihat komentar di sana).
+const NANO_BANANA_COST_USD = 0.15;
 
 export interface GenerateMarketingPhotoInput {
   sourceImageUrl: string; // foto produk yang sudah ada (model + garment, biasanya studio polos)
@@ -73,6 +80,7 @@ export async function generateMarketingPhoto(
   if (!data.images?.[0]?.url) {
     throw new Error("Nano Banana tidak mengembalikan gambar");
   }
+  void logAiCost({ feature: "nano_banana_marketing_photo", costUsd: NANO_BANANA_COST_USD });
 
   return {
     imageUrl: data.images[0].url,

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, UserRound } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -16,6 +16,16 @@ import type { AiModel } from "@/types/database";
 
 // Models — CRUD model AI, tanpa training (PRD §7.2 v0.3). Foto pose
 // dikelola terpisah di /poses karena satu model bisa punya banyak pose.
+//
+// REVISI Agustus 2026 v2:
+// 1. Upload thumbnail di form "Tambah Model" sebelumnya full-width (ikut
+//    lebar card, jadi RAKSASA di layar sempit) — sekarang dikecilkan &
+//    ditaruh di kiri (flex row, admin minta "flex between, upload di
+//    kiri"), field nama di kanan.
+// 2. Preset yang sudah dibuat sebelumnya TIDAK BISA diedit sama sekali
+//    (cuma aktifkan/nonaktifkan/hapus) — kalau admin lupa isi thumbnail
+//    atau salah nama, satu-satunya jalan adalah hapus & buat ulang dari
+//    nol. Sekarang ditambah mode edit inline per-card (tombol pensil).
 export default function ModelsPage() {
   const [models, setModels] = useState<AiModel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +33,11 @@ export default function ModelsPage() {
   const [name, setName] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editThumbnailUrl, setEditThumbnailUrl] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function loadModels() {
     setLoading(true);
@@ -83,6 +98,34 @@ export default function ModelsPage() {
     loadModels();
   }
 
+  function startEdit(model: AiModel) {
+    setEditingId(model.id);
+    setEditName(model.name);
+    setEditThumbnailUrl(model.thumbnail_url);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(model: AiModel) {
+    if (!editName.trim()) return;
+    setSavingEdit(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("ai_models")
+      .update({ name: editName.trim(), thumbnail_url: editThumbnailUrl })
+      .eq("id", model.id);
+    setSavingEdit(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Model diperbarui");
+    setEditingId(null);
+    loadModels();
+  }
+
   return (
     <AppShell>
       <PageHeader
@@ -99,23 +142,29 @@ export default function ModelsPage() {
             <CardTitle>Tambah Model</CardTitle>
           </CardHeader>
           <CardBody>
+            {/* REVISI v2: upload dikecilkan & ditaruh kiri (flex-between),
+                bukan full-width lagi. */}
             <form onSubmit={handleAdd} className="flex flex-col gap-4">
-              <div>
-                <Label htmlFor="model-name">Nama Model</Label>
-                <Input
-                  id="model-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="mis. Model A"
-                />
+              <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
+                <div className="w-full sm:w-40 sm:shrink-0">
+                  <ImageUploadField
+                    label="Thumbnail"
+                    folder="models"
+                    value={thumbnailUrl}
+                    onChange={setThumbnailUrl}
+                    aspect="aspect-square"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="model-name">Nama Model</Label>
+                  <Input
+                    id="model-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="mis. Model A"
+                  />
+                </div>
               </div>
-              <ImageUploadField
-                label="Thumbnail"
-                folder="models"
-                value={thumbnailUrl}
-                onChange={setThumbnailUrl}
-                aspect="aspect-square"
-              />
               <Button type="submit" loading={saving} disabled={!name.trim()}>
                 <Plus className="h-4 w-4" />
                 Tambah Model
@@ -136,47 +185,92 @@ export default function ModelsPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {models.map((model, i) => (
-                <motion.div
-                  key={model.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25, delay: i * 0.03 }}
-                >
-                  <Card className="overflow-hidden">
-                    <div className="aspect-square w-full bg-surface-2">
-                      {model.thumbnail_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={model.thumbnail_url}
-                          alt={model.name}
-                          className="h-full w-full object-cover"
-                        />
+              {models.map((model, i) => {
+                const isEditing = editingId === model.id;
+                return (
+                  <motion.div
+                    key={model.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.03 }}
+                  >
+                    <Card className="overflow-hidden">
+                      {isEditing ? (
+                        <CardBody className="flex flex-col gap-3">
+                          <div className="w-32">
+                            <ImageUploadField
+                              label="Thumbnail"
+                              folder="models"
+                              value={editThumbnailUrl}
+                              onChange={setEditThumbnailUrl}
+                              aspect="aspect-square"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor={`edit-model-name-${model.id}`}>Nama Model</Label>
+                            <Input
+                              id={`edit-model-name-${model.id}`}
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              loading={savingEdit}
+                              disabled={!editName.trim()}
+                              onClick={() => saveEdit(model)}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Simpan
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={cancelEdit}>
+                              <X className="h-3.5 w-3.5" />
+                              Batal
+                            </Button>
+                          </div>
+                        </CardBody>
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <UserRound className="h-8 w-8 text-text-faint" />
-                        </div>
+                        <>
+                          <div className="aspect-square w-full bg-surface-2">
+                            {model.thumbnail_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={model.thumbnail_url}
+                                alt={model.name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center">
+                                <UserRound className="h-8 w-8 text-text-faint" />
+                              </div>
+                            )}
+                          </div>
+                          <CardBody>
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                              <span className="font-medium text-text">{model.name}</span>
+                              <Badge tone={model.is_active ? "success" : "muted"}>
+                                {model.is_active ? "Aktif" : "Nonaktif"}
+                              </Badge>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="sm" onClick={() => toggleActive(model)}>
+                                {model.is_active ? "Nonaktifkan" : "Aktifkan"}
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => startEdit(model)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="danger" size="sm" onClick={() => handleDelete(model)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </CardBody>
+                        </>
                       )}
-                    </div>
-                    <CardBody>
-                      <div className="mb-3 flex items-center justify-between gap-2">
-                        <span className="font-medium text-text">{model.name}</span>
-                        <Badge tone={model.is_active ? "success" : "muted"}>
-                          {model.is_active ? "Aktif" : "Nonaktif"}
-                        </Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => toggleActive(model)}>
-                          {model.is_active ? "Nonaktifkan" : "Aktifkan"}
-                        </Button>
-                        <Button variant="danger" size="sm" onClick={() => handleDelete(model)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </CardBody>
-                  </Card>
-                </motion.div>
-              ))}
+                    </Card>
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </div>

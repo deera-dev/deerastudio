@@ -10,49 +10,14 @@
 // ubah struktur render.
 //
 // Server-only (pakai node:fs) — jangan diimpor dari komponen client.
+//
+// REVISI Agustus 2026: loadFonts()/loadLogoDataUri() DIPINDAH ke
+// lib/image-template/assets.ts (dipakai bareng set-collage.tsx — kolase
+// "4 foto" Generate/History — supaya font & logo brand tidak dimuat/
+// didefinisikan dua kali di dua template berbeda).
 import { ImageResponse } from "next/og";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { loadFonts, loadLogoDataUri } from "./assets";
 import { warnaToHex } from "./color-map";
-
-const FONT_DIR = path.join(process.cwd(), "lib/image-template/fonts");
-const ASSET_DIR = path.join(process.cwd(), "lib/image-template/assets");
-
-type PosterFont = {
-  name: string;
-  data: Buffer;
-  weight: 400 | 600 | 700;
-  style: "normal";
-};
-
-let fontsCache: PosterFont[] | null = null;
-let logoDataUriCache: string | null = null;
-
-async function loadFonts(): Promise<PosterFont[]> {
-  if (fontsCache) return fontsCache;
-  const [frauncesSemi, frauncesBold, alexBrush, poppinsReg, poppinsSemi] = await Promise.all([
-    readFile(path.join(FONT_DIR, "Fraunces-SemiBold.ttf")),
-    readFile(path.join(FONT_DIR, "Fraunces-Bold.ttf")),
-    readFile(path.join(FONT_DIR, "AlexBrush-Regular.ttf")),
-    readFile(path.join(FONT_DIR, "Poppins-Regular.ttf")),
-    readFile(path.join(FONT_DIR, "Poppins-SemiBold.ttf")),
-  ]);
-  fontsCache = [
-    { name: "Fraunces", data: frauncesSemi, weight: 600, style: "normal" },
-    { name: "Fraunces", data: frauncesBold, weight: 700, style: "normal" },
-    { name: "AlexBrush", data: alexBrush, weight: 400, style: "normal" },
-    { name: "Poppins", data: poppinsReg, weight: 400, style: "normal" },
-    { name: "Poppins", data: poppinsSemi, weight: 600, style: "normal" },
-  ];
-  return fontsCache;
-}
-
-async function loadLogoDataUri(): Promise<string> {
-  if (logoDataUriCache) return logoDataUriCache;
-  const buf = await readFile(path.join(ASSET_DIR, "logo-mark.png"));
-  logoDataUriCache = `data:image/png;base64,${buf.toString("base64")}`;
-  return logoDataUriCache;
-}
 
 export interface PosterHeadlineLine {
   text: string;

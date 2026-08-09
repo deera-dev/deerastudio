@@ -322,6 +322,13 @@ export default function ContentStudioPage() {
         onDownload={(post) => contentPosts.downloadImage(post.image_urls[0], `${post.product_kode}-${post.id}.jpg`)}
         publishingId={contentPosts.publishingId}
         instagramConfigured={contentPosts.instagramConfigured}
+        searchInput={contentPosts.searchInput}
+        onSearchInputChange={contentPosts.setSearchInput}
+        search={contentPosts.search}
+        page={contentPosts.page}
+        onPageChange={contentPosts.setPage}
+        totalCount={contentPosts.totalCount}
+        totalPages={contentPosts.totalPages}
       />
     </AppShell>
   );

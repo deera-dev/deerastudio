@@ -13,6 +13,12 @@
 // orang (3-5), makin tinggi kemungkinan wajah/detail baju sedikit meleset.
 // Rekomendasikan admin review ketat before-pakai, generate ulang kalau perlu.
 import { fal, FAL_MODELS } from "../fal/client";
+import { logAiCost } from "../cost-log";
+
+// Sama seperti marketing-photo.ts — fal.ai tidak mengembalikan usage.cost
+// utk endpoint image-gen ini, dicatat pakai harga tetap $0.15/panggilan
+// (Nano Banana Pro edit, 1K).
+const NANO_BANANA_COST_USD = 0.15;
 
 export interface GenerateComboPhotoInput {
   sourceImageUrls: string[]; // 2-5 foto produk (masing-masing 1 model + garment), sudah ada
@@ -80,6 +86,7 @@ export async function generateComboPhoto(
   if (!data.images?.[0]?.url) {
     throw new Error("Nano Banana tidak mengembalikan gambar");
   }
+  void logAiCost({ feature: "nano_banana_combo_photo", costUsd: NANO_BANANA_COST_USD, note: `${count} produk` });
 
   return {
     imageUrl: data.images[0].url,
