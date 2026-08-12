@@ -55,6 +55,20 @@ export interface NanoBananaGenerateInput {
   // (menegaskan "wajah tidak boleh terlihat, ini foto belakang"), bukan lagi
   // satu-satunya sinyal yang menentukan arah foto.
   isBackView?: boolean;
+  // REVISI (Agustus 2026 — admin regenerate berkali-kali di History tapi
+  // hasilnya masih belum sesuai, tanya "bisa ga kita kasih prompt lagi buat
+  // benerin dibandingkan generate dari awal?"): sebelumnya "Generate Ulang"
+  // cuma re-roll seed acak dgn prompt yang PERSIS SAMA — kalau masalahnya
+  // spesifik (mis. "background kurang terang", "pose kaku", "kain kurang
+  // jatuh natural"), admin tidak ada cara kasih tahu AI apa yang mau
+  // diperbaiki, cuma bisa coba-coba lagi & berharap random seed beda hasil.
+  // Field ini diisi dari catatan bebas yang admin ketik di dialog konfirmasi
+  // regenerate (lihat components/ui/PromptDialog.tsx & app/history/
+  // page.tsx handleRegenerate) — HANYA dipakai saat regenerate satu foto
+  // (app/api/generations/[id]/regenerate/route.ts), TIDAK dipakai saat
+  // generate-set awal (belum ada "hasil sebelumnya" utk dikoreksi).
+  // Ditempel di buildPrompt() sbg klausa prioritas TINGGI di awal prompt.
+  correctionNote?: string;
 }
 
 export interface NanoBananaGenerateResult {
@@ -77,6 +91,10 @@ function buildPrompt(input: NanoBananaGenerateInput): string {
     "TASK: create ONE new photorealistic fashion catalog photograph of the SAME MODEL from the MODEL REFERENCE images, now wearing the EXACT garment shown in the PRODUCT REFERENCE images, in a new pose and setting described below. The result must look like a real professional photograph from the same brand's catalog, not an AI-generated image.",
     "",
     "CORE RULE: only the clothing, pose, and background should change. The model's identity must stay the same person. The garment must be reproduced from the PRODUCT REFERENCE images with maximum possible accuracy — do not redesign, reinterpret, simplify, or improve it, and do not blend any clothing details from the MODEL REFERENCE images into the new garment (those old clothes are NOT the product; they exist only to show who the model is).",
+    "",
+    input.correctionNote
+      ? `CORRECTION FROM ART DIRECTOR (read this first, highest priority — a previous attempt at this exact photo had a specific problem that needs fixing): "${input.correctionNote}". Prioritize fixing this specific issue above all else in this new attempt, while still following every other rule in this brief (identity, garment fidelity, pose, background).`
+      : "",
     "",
     "1. MODEL IDENTITY (critical): use the exact same woman shown in the MODEL REFERENCE images. Preserve her face shape, eyes, eyebrows, nose, lips, jawline, skin tone, skin texture, body proportions, apparent height, physique, apparent age, hands, and fingers. Do not generate a different woman. Do not beautify or restructure her face. Minor natural photographic variation is fine, but identity consistency is mandatory.",
     "",

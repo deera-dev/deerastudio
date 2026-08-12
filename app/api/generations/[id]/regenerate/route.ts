@@ -39,7 +39,22 @@
 //   generate ulang 2 crop close-up dari utama (Kontext) lalu disusun ulang
 //   — 2 crop itu TIDAK disimpan sbg baris sendiri (konsisten dgn alur
 //   generate-set awal).
+//
+// REVISI (Agustus 2026 — admin regenerate D-024-HMS berkali-kali tapi hasil
+// masih belum sesuai, tanya "bisa ga kita kasih prompt lagi buat benerin
+// dibandingkan generate dari awal?"): sebelumnya endpoint ini SELALU re-roll
+// dgn prompt yang PERSIS SAMA setiap kali diregenerate (cuma seed acak yang
+// beda) — kalau masalahnya spesifik, admin cuma bisa coba-coba & berharap
+// random seed kebetulan lebih baik. Body request sekarang boleh berisi
+// `note` (opsional, diisi lewat dialog di History — lihat components/ui/
+// PromptDialog.tsx & app/history/page.tsx handleRegenerate) yang diteruskan
+// sbg `correctionNote` ke runNanoBananaGenerate — ditempel prioritas TINGGI
+// di awal prompt (lihat lib/prompts/nano-banana-generate.ts). Cuma berlaku
+// utk role "utama"/"angle"/"seri" (full re-render lewat Nano Banana Pro) —
+// TIDAK utk kolase_gabungan/kolase_detail/detail (crop/composite, bukan
+// re-render, jadi tidak relevan dikasih instruksi konten).
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { runNanoBananaGenerate } from "@/lib/prompts/nano-banana-generate";
 import { runDetailCrop } from "@/lib/prompts/stage2";
@@ -47,6 +62,10 @@ import { composeBackground, type BackgroundMode } from "@/lib/prompts/background
 import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-template/set-collage";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import type { BackgroundPresetRow, Generation } from "@/types/database";
+
+const requestSchema = z.object({
+  note: z.string().trim().max(500).optional(),
+});
 
 const DETAIL_FOCUS_AREAS = [
   "collar and neckline embroidery",
@@ -86,10 +105,15 @@ function collectGarmentUrls(images: ProductImagesShape) {
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  // Body opsional — endpoint ini dulu tidak pernah baca body sama sekali,
+  // jadi terima juga request tanpa body/JSON kosong dgn aman.
+  const rawBody = await req.json().catch(() => ({}));
+  const parsedBody = requestSchema.safeParse(rawBody);
+  const note = parsedBody.success ? parsedBody.data.note : undefined;
   const supabase = await createClient();
 
   const { data: gen, error: genError } = await supabase
@@ -174,6 +198,7 @@ export async function POST(
         // sudah fallback ke set.pose_id), dibedakan lewat flag ini supaya AI
         // merender ulang scene yang sama dari sisi belakang model.
         isBackView: gen.image_role === "angle",
+        correctionNote: note || undefined,
       });
 
       await supabase

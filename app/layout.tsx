@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { ImageLightboxHost } from "@/components/ui/ImageLightbox";
+import { PromptDialogHost } from "@/components/ui/PromptDialog";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default function RootLayout({
         {children}
         <ConfirmDialogHost />
         <ImageLightboxHost />
+        <PromptDialogHost />
         <Toaster
           position="top-right"
           theme="light"

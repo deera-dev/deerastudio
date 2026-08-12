@@ -24,6 +24,7 @@ import { Input, Label, Select, Textarea, FieldHint } from "@/components/ui/Field
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { showImageLightbox } from "@/components/ui/ImageLightbox";
+import { promptDialog } from "@/components/ui/PromptDialog";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { Generation, GenerationSet, GenerationSetStatus, ImageRole } from "@/types/database";
@@ -259,11 +260,41 @@ export default function HistoryPage() {
     }
   }
 
+  // REVISI (Agustus 2026 — admin regenerate D-024-HMS berulang kali tapi
+  // hasil masih belum sesuai, tanya "bisa ga kita kasih prompt lagi buat
+  // benerin dibandingkan generate dari awal?"): sebelumnya tombol ini
+  // langsung regenerate tanpa tanya apa-apa (cuma re-roll seed acak dgn
+  // prompt yang sama persis). Sekarang, KHUSUS role yang full re-render
+  // lewat Nano Banana Pro (utama/angle/seri — bukan kolase/detail yang
+  // cuma compositing/crop), tanya dulu lewat promptDialog apa yang mau
+  // diperbaiki — diteruskan sbg correctionNote (lihat app/api/generations/
+  // [id]/regenerate/route.ts & lib/prompts/nano-banana-generate.ts).
   async function handleRegenerate(genId: string) {
     if (!selected) return;
+    const gen = selected.ai_generations.find((g) => g.id === genId);
+    const supportsNote =
+      gen?.image_role === "utama" || gen?.image_role === "angle" || gen?.image_role === "seri";
+
+    let note: string | undefined;
+    if (supportsNote) {
+      const result = await promptDialog({
+        title: `Generate Ulang — ${ROLE_LABELS[gen!.image_role] ?? gen!.image_role}`,
+        description:
+          "Kalau hasil sebelumnya ada yang kurang pas, tulis di sini apa yang mau diperbaiki (Inggris lebih akurat) — AI diprioritaskan memperbaiki itu, bukan cuma coba ulang dgn seed acak. Kosongkan aja kalau cuma mau coba ulang biasa.",
+        placeholder: "mis. remove the bookshelf in the background, make the pose more relaxed...",
+        confirmLabel: "Generate Ulang",
+      });
+      if (result === null) return; // dibatalkan dari dialog
+      note = result;
+    }
+
     setRegeneratingId(genId);
     try {
-      const res = await fetch(`/api/generations/${genId}/regenerate`, { method: "POST" });
+      const res = await fetch(`/api/generations/${genId}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: note || undefined }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Regenerate gagal");
       toast.success("Gambar berhasil digenerate ulang");
