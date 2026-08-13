@@ -25,6 +25,22 @@
 // - Foto "detail"/"seri" (crop/zoom dari foto utama) TETAP pakai Kontext
 //   (lib/prompts/stage2.ts runDetailCrop) — itu operasi reframe murni,
 //   bukan re-render produk dari nol, jadi tidak perlu ganti & tetap murah.
+//
+// REVISI (Agustus 2026 — admin: "untuk foto yang bagian belakang itu,
+// jilbabnya selalu menutupi produknya, bisa ga diset foto belakang itu
+// pakai model jilbab yang pendek aja"): utk role "angle" (isBackView),
+// klausa 6 STYLING sekarang WAJIB jilbab PENDEK (selutut bahu, bukan
+// draping panjang) supaya seluruh bagian belakang garment (panel, closure,
+// bordir, jahitan, hem) tidak tertutup kain jilbab — berlaku PERMANEN utk
+// semua foto "angle" ke depan, bukan cuma sekali perbaikan lewat
+// correctionNote. Klausa 4 POSE & FRAMING (back view) juga dikoreksi —
+// sebelumnya malah eksplisit minta AI reproduksi "hijab drape from behind"
+// dari foto referensi pose belakang, yang KONTRADIKTIF sama tujuan ini
+// (foto referensi pose belakang kemungkinan besar jilbabnya juga panjang,
+// dan model AI cenderung niru struktur visual referensi drpd instruksi
+// teks generik — pelajaran yang sama dari REVISI #8/#9 di app/api/
+// generate-set/route.ts) — klausa baru eksplisit bilang "even if the
+// MODEL REFERENCE shows a longer hijab, shorten it for this shot".
 import { fal, FAL_MODELS } from "../fal/client";
 
 export interface NanoBananaGenerateInput {
@@ -130,12 +146,14 @@ function buildPrompt(input: NanoBananaGenerateInput): string {
     "3. GARMENT CONSTRUCTION: the clothing must behave like a real physical garment on her body — realistic fabric weight, natural draping, folds, wrinkles, and tension appropriate to the fabric shown in the PRODUCT REFERENCE images. Do not paint the garment onto her body. Do not make it tighter than the actual product's cut.",
     "",
     input.isBackView
-      ? "4. POSE & FRAMING (BACK VIEW — critical): one of the MODEL REFERENCE images already shows this exact model with her BACK to the camera. Reproduce that same back-facing standing pose and camera framing in the new photograph — she must be facing AWAY from the camera the entire time, showing the back of the garment (back panel, back embroidery/motif if any, closure, hemline from behind, hijab drape from behind). Full body must be visible from head to toe. Her face must NOT be visible anywhere in this image — if any part of her face is visible, the pose is wrong. Do not crop the garment."
+      ? "4. POSE & FRAMING (BACK VIEW — critical): one of the MODEL REFERENCE images already shows this exact model with her BACK to the camera. Reproduce that same back-facing standing pose and camera framing in the new photograph — she must be facing AWAY from the camera the entire time, showing the back of the garment (back panel, back embroidery/motif if any, closure, hemline from behind) FULLY VISIBLE and unobstructed — see clause 6 below for the short-hijab requirement this depends on. Full body must be visible from head to toe. Her face must NOT be visible anywhere in this image — if any part of her face is visible, the pose is wrong. Do not crop the garment."
       : "4. POSE & FRAMING: a natural standing full-body fashion catalog pose. Full body must be visible from head to toe. Do not crop the garment. Do not zoom into just the face.",
     "",
     `5. BACKGROUND & SETTING: ${input.backgroundDescription}. The background must complement the garment and remain secondary to it — clean, elegant, premium studio/interior atmosphere suitable for an established Indonesian Muslim fashion brand. No distracting objects, no fantasy environment, no obviously AI-generated background.`,
     "",
-    "6. STYLING: elegant modest hijab styling consistent with the MODEL REFERENCE images' brand language, natural makeup, minimal jewelry. Do not invent accessories that conflict with the product. If the PRODUCT REFERENCE images clearly include a matching hijab/inner/belt as part of the set, reproduce it accurately; otherwise do not add extra clothing items.",
+    input.isBackView
+      ? "6. STYLING (BACK VIEW — critical): use a SHORT hijab style that ends at or just below the shoulders — a cropped/shoulder-length hijab, NOT a long flowing hijab that drapes down the back. This is mandatory even if a MODEL REFERENCE image (including the back-facing pose reference) shows the model in a longer, draping hijab — for THIS back-view shot specifically, shorten it so it does not cover any part of the garment. The entire back of the garment (back panel, closure, embroidery/motif, seams, hemline) must remain fully visible and completely unobstructed by hijab fabric. Natural makeup, minimal jewelry. Do not invent accessories that conflict with the product."
+      : "6. STYLING: elegant modest hijab styling consistent with the MODEL REFERENCE images' brand language, natural makeup, minimal jewelry. Do not invent accessories that conflict with the product. If the PRODUCT REFERENCE images clearly include a matching hijab/inner/belt as part of the set, reproduce it accurately; otherwise do not add extra clothing items.",
     accessoryClause ? `Add these accessories if appropriate: ${accessoryClause}.` : "",
     input.productWarna
       ? `Hijab color and any visible footwear should coordinate with the garment's primary color: ${input.productWarna}.`
