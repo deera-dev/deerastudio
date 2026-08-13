@@ -276,6 +276,7 @@ export default function HistoryPage() {
       gen?.image_role === "utama" || gen?.image_role === "angle" || gen?.image_role === "seri";
 
     let note: string | undefined;
+    let referenceImageUrl: string | undefined;
     if (supportsNote) {
       const result = await promptDialog({
         title: `Generate Ulang — ${ROLE_LABELS[gen!.image_role] ?? gen!.image_role}`,
@@ -283,9 +284,13 @@ export default function HistoryPage() {
           "Kalau hasil sebelumnya ada yang kurang pas, tulis di sini apa yang mau diperbaiki (Inggris lebih akurat) — AI diprioritaskan memperbaiki itu, bukan cuma coba ulang dgn seed acak. Kosongkan aja kalau cuma mau coba ulang biasa.",
         placeholder: "mis. remove the bookshelf in the background, make the pose more relaxed...",
         confirmLabel: "Generate Ulang",
+        allowImage: true,
+        imageLabel: "Foto Referensi (opsional)",
+        imageHint: "Contoh foto yang menunjukkan maksud perbaikan (pose/background/detail) — AI pakai ini sbg acuan visual tambahan, bukan pengganti foto produk/model.",
       });
       if (result === null) return; // dibatalkan dari dialog
-      note = result;
+      note = result.note;
+      referenceImageUrl = result.referenceImageUrl ?? undefined;
     }
 
     setRegeneratingId(genId);
@@ -293,7 +298,7 @@ export default function HistoryPage() {
       const res = await fetch(`/api/generations/${genId}/regenerate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note: note || undefined }),
+        body: JSON.stringify({ note: note || undefined, referenceImageUrl }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Regenerate gagal");

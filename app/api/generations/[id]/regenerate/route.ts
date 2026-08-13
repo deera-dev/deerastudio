@@ -65,6 +65,9 @@ import type { BackgroundPresetRow, Generation } from "@/types/database";
 
 const requestSchema = z.object({
   note: z.string().trim().max(500).optional(),
+  // REVISI — foto referensi tambahan opsional (lihat catatan correctionNote
+  // di lib/prompts/nano-banana-generate.ts & components/ui/PromptDialog.tsx).
+  referenceImageUrl: z.string().url().optional(),
 });
 
 const DETAIL_FOCUS_AREAS = [
@@ -114,6 +117,7 @@ export async function POST(
   const rawBody = await req.json().catch(() => ({}));
   const parsedBody = requestSchema.safeParse(rawBody);
   const note = parsedBody.success ? parsedBody.data.note : undefined;
+  const referenceImageUrl = parsedBody.success ? parsedBody.data.referenceImageUrl : undefined;
   const supabase = await createClient();
 
   const { data: gen, error: genError } = await supabase
@@ -199,6 +203,7 @@ export async function POST(
         // merender ulang scene yang sama dari sisi belakang model.
         isBackView: gen.image_role === "angle",
         correctionNote: note || undefined,
+        correctionReferenceUrl: referenceImageUrl || undefined,
       });
 
       await supabase

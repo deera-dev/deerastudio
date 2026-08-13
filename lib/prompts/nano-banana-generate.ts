@@ -69,6 +69,17 @@ export interface NanoBananaGenerateInput {
   // generate-set awal (belum ada "hasil sebelumnya" utk dikoreksi).
   // Ditempel di buildPrompt() sbg klausa prioritas TINGGI di awal prompt.
   correctionNote?: string;
+  // REVISI (Agustus 2026, segera setelah correctionNote di atas — admin:
+  // "cuma saya gabisa kasih image referencenya, bakal lebih bagus kalau
+  // saya bisa kasih prompt buat benerin beserta dengan image yang saya
+  // maksud"): foto referensi TAMBAHAN opsional yang admin upload di dialog
+  // regenerate (lihat components/ui/PromptDialog.tsx), menunjukkan SECARA
+  // VISUAL apa yang dimaksud correctionNote (mis. contoh pose yang
+  // diinginkan, mood background, atau detail spesifik). Diselipkan sbg
+  // gambar TERAKHIR di imageUrls (lihat runNanoBananaGenerate) & dijelaskan
+  // di prompt sbg referensi KHUSUS utk koreksi ini — TIDAK menggantikan
+  // MODEL REFERENCE (identitas) atau PRODUCT REFERENCE (garment) manapun.
+  correctionReferenceUrl?: string;
 }
 
 export interface NanoBananaGenerateResult {
@@ -93,7 +104,15 @@ function buildPrompt(input: NanoBananaGenerateInput): string {
     "CORE RULE: only the clothing, pose, and background should change. The model's identity must stay the same person. The garment must be reproduced from the PRODUCT REFERENCE images with maximum possible accuracy — do not redesign, reinterpret, simplify, or improve it, and do not blend any clothing details from the MODEL REFERENCE images into the new garment (those old clothes are NOT the product; they exist only to show who the model is).",
     "",
     input.correctionNote
-      ? `CORRECTION FROM ART DIRECTOR (read this first, highest priority — a previous attempt at this exact photo had a specific problem that needs fixing): "${input.correctionNote}". Prioritize fixing this specific issue above all else in this new attempt, while still following every other rule in this brief (identity, garment fidelity, pose, background).`
+      ? [
+          `CORRECTION FROM ART DIRECTOR (read this first, highest priority — a previous attempt at this exact photo had a specific problem that needs fixing): "${input.correctionNote}".`,
+          input.correctionReferenceUrl
+            ? " An additional CORRECTION REFERENCE image has also been provided — it is the LAST image in this entire set of reference images. Study it to understand exactly what the art director means by the correction note above (it may show a desired pose, camera framing, background mood/setting, or a specific garment detail to fix). Use it ONLY to understand and apply that specific correction — it does NOT override the MODEL REFERENCE images for identity, nor the PRODUCT REFERENCE images for the garment's true color/pattern/construction."
+            : "",
+          " Prioritize fixing this specific issue above all else in this new attempt, while still following every other rule in this brief (identity, garment fidelity, pose, background).",
+        ]
+          .filter(Boolean)
+          .join("")
       : "",
     "",
     "1. MODEL IDENTITY (critical): use the exact same woman shown in the MODEL REFERENCE images. Preserve her face shape, eyes, eyebrows, nose, lips, jawline, skin tone, skin texture, body proportions, apparent height, physique, apparent age, hands, and fingers. Do not generate a different woman. Do not beautify or restructure her face. Minor natural photographic variation is fine, but identity consistency is mandatory.",
@@ -146,6 +165,9 @@ export async function runNanoBananaGenerate(
     input.poseImageUrl,
     ...(input.identityReferenceUrls ?? []),
     ...input.garmentImageUrls,
+    // Selalu TERAKHIR — prompt (klausa "CORRECTION REFERENCE image... the
+    // LAST image in this entire set") mengasumsikan urutan ini.
+    ...(input.correctionReferenceUrl ? [input.correctionReferenceUrl] : []),
   ];
 
   const result = await fal.subscribe(FAL_MODELS.NANO_BANANA, {

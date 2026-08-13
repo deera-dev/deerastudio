@@ -5,15 +5,26 @@
 // generations/[id]/regenerate/route.ts): admin sering regenerate BERKALI-
 // KALI berharap hasilnya beda krn random seed, padahal maunya kasih
 // instruksi SPESIFIK ("jangan ada rak buku di background", "pose kurang
-// natural", dst) yang selama ini tidak ada tempatnya. Return string kosong
-// kalau admin submit tanpa isi apa-apa (regenerate biasa, tanpa catatan
-// tambahan), atau `null` kalau admin Batal (regenerate dibatalkan sama
-// sekali).
+// natural", dst) yang selama ini tidak ada tempatnya. Resolve `null` kalau
+// admin Batal (regenerate dibatalkan sama sekali), atau `{ note,
+// referenceImageUrl }` kalau submit (note boleh kosong = regenerate biasa
+// tanpa catatan).
+//
+// REVISI (Agustus 2026, segera setelah catatan teks di atas dipakai —
+// admin: "cuma saya gabisa kasih image referencenya, bakal lebih bagus
+// kalau saya bisa kasih prompt buat benerin beserta dengan image yang saya
+// maksud"): tambah field upload foto referensi OPSIONAL
+// (`allowImage: true`) — dipakai bareng catatan teks sbg acuan visual
+// tambahan saat regenerate (lihat correctionReferenceUrl di
+// lib/prompts/nano-banana-generate.ts). Kalau `allowImage` tidak di-set,
+// field foto tidak dirender sama sekali (dialog tetap bisa dipakai generik
+// utk kasus lain yang cuma butuh teks).
 import { Fragment, useEffect, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
 import { Wand2 } from "lucide-react";
 import { Button } from "./Button";
 import { Textarea } from "./Field";
+import { ImageUploadField } from "./ImageUploadField";
 
 type PromptOptions = {
   title: string;
@@ -21,13 +32,18 @@ type PromptOptions = {
   placeholder?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  allowImage?: boolean;
+  imageLabel?: string;
+  imageHint?: string;
 };
 
-type PromptState = PromptOptions & { resolve: (value: string | null) => void };
+export type PromptResult = { note: string; referenceImageUrl: string | null };
 
-let openImpl: ((opts: PromptOptions) => Promise<string | null>) | null = null;
+type PromptState = PromptOptions & { resolve: (value: PromptResult | null) => void };
 
-export function promptDialog(opts: PromptOptions): Promise<string | null> {
+let openImpl: ((opts: PromptOptions) => Promise<PromptResult | null>) | null = null;
+
+export function promptDialog(opts: PromptOptions): Promise<PromptResult | null> {
   if (!openImpl) return Promise.resolve(null);
   return openImpl(opts);
 }
@@ -35,11 +51,13 @@ export function promptDialog(opts: PromptOptions): Promise<string | null> {
 export function PromptDialogHost() {
   const [state, setState] = useState<PromptState | null>(null);
   const [value, setValue] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     openImpl = (opts) =>
-      new Promise<string | null>((resolve) => {
+      new Promise<PromptResult | null>((resolve) => {
         setValue("");
+        setImageUrl(null);
         setState({ ...opts, resolve });
       });
     return () => {
@@ -47,7 +65,7 @@ export function PromptDialogHost() {
     };
   }, []);
 
-  function handle(result: string | null) {
+  function handle(result: PromptResult | null) {
     state?.resolve(result);
     setState(null);
   }
@@ -95,13 +113,28 @@ export function PromptDialogHost() {
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder={state?.placeholder}
-                className="mb-6"
+                className={state?.allowImage ? "mb-4" : "mb-6"}
               />
+              {state?.allowImage && (
+                <div className="mb-6 max-w-[180px]">
+                  <ImageUploadField
+                    label={state.imageLabel ?? "Foto Referensi (opsional)"}
+                    folder="corrections"
+                    value={imageUrl}
+                    onChange={setImageUrl}
+                    hint={state.imageHint}
+                  />
+                </div>
+              )}
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => handle(null)}>
                   {state?.cancelLabel ?? "Batal"}
                 </Button>
-                <Button variant="primary" size="sm" onClick={() => handle(value.trim())}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handle({ note: value.trim(), referenceImageUrl: imageUrl })}
+                >
                   {state?.confirmLabel ?? "Generate Ulang"}
                 </Button>
               </div>
