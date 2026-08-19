@@ -133,11 +133,26 @@
 // bukan berarti fitur ini masih dipakai utk generate baru. lib/image-
 // template/set-collage.tsx juga TIDAK dihapus, dgn alasan yang sama.
 //
+// REVISI BESAR (Agustus 2026, sepaket dgn rewrite prompt di lib/prompts/
+// nano-banana-generate.ts — lihat header file itu utk latar belakang
+// lengkap): collectGarmentUrls() lokal di file ini DIHAPUS, diganti
+// collectGarmentReferences() yang dipusatkan di nano-banana-generate.ts —
+// tiap foto produk sekarang bawa LABEL perannya (front/back/detail dada/
+// dst), dipakai buildPrompt() utk susun "PRODUCT REFERENCE MAP" eksplisit.
+// prioritizeUrl(string[]) juga diganti prioritizeReference(GarmentReference[])
+// supaya label ikut pindah bareng saat foto "Belakang" diprioritaskan utk
+// role "angle".
+//
 // POST /api/generate-set — PRD §15 & §7.6.
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { runNanoBananaGenerate } from "@/lib/prompts/nano-banana-generate";
+import {
+  runNanoBananaGenerate,
+  prioritizeReference,
+  collectGarmentReferences,
+  type GarmentReference,
+} from "@/lib/prompts/nano-banana-generate";
 import { composeBackground, type BackgroundMode } from "@/lib/prompts/background-composer";
 import type { AccessoryPresetRow, BackgroundPresetRow } from "@/types/database";
 // REVISI #11 — runDetailCrop, renderKolaseGabunganPng/renderKolaseDetailPng,
@@ -183,22 +198,6 @@ const IDENTITY_REFERENCE_COUNT = 2;
 // Estimasi Rp per panggilan (kurs ~Rp17.900/USD, Agustus 2026):
 // Nano Banana Pro $0.15/gambar (resolusi 1K) ~ Rp2.700.
 const COST_FULL_PASS = 2700; // 1x Nano Banana Pro (utama, foto angle, DAN tiap foto seri)
-
-// Kumpulkan semua URL foto produk warna UTAMA (depan + 6 slot detail
-// opsional) jadi satu array — dipakai utk foto utama/angle, DAN sbg
-// referensi bentuk/tekstur/bordir (bukan warna) di tiap foto seri.
-function collectGarmentUrls(images: z.infer<typeof productImagesSchema>) {
-  return [
-    images.front,
-    images.detailChest,
-    images.detailNeck,
-    images.detailSleeve,
-    images.detailHand,
-    images.detailHem,
-    images.back,
-    images.fullBody,
-  ].filter((url): url is string => Boolean(url));
-}
 
 export async function POST(req: NextRequest) {
   const body = requestSchema.safeParse(await req.json());
@@ -306,7 +305,8 @@ export async function POST(req: NextRequest) {
   // Semua foto produk warna UTAMA yang diupload — dikirim APA ADANYA (tidak
   // dikomposit) ke Nano Banana Pro, lihat catatan "Opsi B" di atas. Dipakai
   // ulang sbg referensi bentuk/tekstur/bordir di tiap foto seri (REVISI #6).
-  const primaryGarmentUrls = collectGarmentUrls(input.productImages);
+  // Sekarang tiap entri bawa label perannya (lihat REVISI BESAR prompt map).
+  const primaryGarmentReferences = collectGarmentReferences(input.productImages);
 
   let totalCost = 0;
   let anyFailed = false;
@@ -318,7 +318,7 @@ export async function POST(req: NextRequest) {
     role: "utama" | "angle" | "seri",
     poseId: string,
     poseImageUrl: string,
-    garmentUrls: string[],
+    garmentReferences: GarmentReference[],
     variantWarna?: string,
     variantProductImages?: Record<string, string>
   ) {
@@ -360,7 +360,7 @@ export async function POST(req: NextRequest) {
       const result = await runNanoBananaGenerate({
         poseImageUrl,
         identityReferenceUrls,
-        garmentImageUrls: garmentUrls,
+        garmentReferences,
         backgroundDescription: background.description,
         productWarna: variantWarna ?? input.productWarna,
         accessoryPromptFragments: accessories.map((a) => a.prompt_fragment),
@@ -400,7 +400,7 @@ export async function POST(req: NextRequest) {
     "utama",
     input.poseId,
     posesById.get(input.poseId)!.reference_image_url,
-    primaryGarmentUrls
+    primaryGarmentReferences
   );
 
   // --- Foto ANGLE (deliverable #2, badan penuh dari BELAKANG) — REVISI #9:
@@ -410,12 +410,15 @@ export async function POST(req: NextRequest) {
   // reinforcement tambahan di prompt. REVISI #11 — ini SEKARANG deliverable
   // TERAKHIR dari set foto tetap (bukan lagi 2 dari 4) — kolase & crop
   // close-up yang dulu disusun sesudah ini SEMUA dihapus, lihat header
-  // file. ---
+  // file. REVISI (fidelity, Agustus 2026) — foto produk "Belakang" (kalau
+  // diupload) dipindah jadi gambar produk PERTAMA di array, menguatkan
+  // klausa BACK VIEW REFERENCE PRIORITY di prompt lewat urutan gambar
+  // juga, bukan cuma teks (lihat prioritizeReference di nano-banana-generate.ts). ---
   await runFullPass(
     "angle",
     backPose.id,
     backPose.reference_image_url,
-    primaryGarmentUrls
+    prioritizeReference(primaryGarmentReferences, input.productImages.back)
   );
 
   // --- Foto SERI (varian warna lain, 0-6x, TIDAK termasuk 4-foto-tetap —
@@ -430,7 +433,13 @@ export async function POST(req: NextRequest) {
       "seri",
       input.poseId,
       utamaPoseUrl,
-      [...primaryGarmentUrls, entry.image],
+      [
+        ...primaryGarmentReferences,
+        {
+          url: entry.image,
+          label: `TARGET COLOR FULL-BODY FLAT-LAY ("${entry.warna}") — this is the specific colorway being generated in this photo; use ONLY to determine color/fabric shade, not construction (see clause 2b)`,
+        },
+      ],
       entry.warna,
       { image: entry.image }
     );

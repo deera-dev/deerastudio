@@ -20,7 +20,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { runNanoBananaGenerate } from "@/lib/prompts/nano-banana-generate";
+import {
+  runNanoBananaGenerate,
+  collectGarmentReferences,
+  type ProductImagesShape,
+} from "@/lib/prompts/nano-banana-generate";
 import type { AccessoryPresetRow } from "@/types/database";
 
 const requestSchema = z.object({
@@ -34,17 +38,6 @@ const requestSchema = z.object({
 const IDENTITY_REFERENCE_COUNT = 2;
 const COST_FULL_PASS = 2700;
 
-type ProductImagesShape = {
-  front: string;
-  back?: string;
-  detailNeck?: string;
-  detailSleeve?: string;
-  detailHand?: string;
-  detailChest?: string;
-  detailHem?: string;
-  fullBody?: string;
-};
-
 type SetShape = {
   id: string;
   product_kode: string;
@@ -57,19 +50,6 @@ type SetShape = {
   total_cost: number | null;
   status: "queued" | "processing" | "completed" | "partial" | "failed";
 };
-
-function collectGarmentUrls(images: ProductImagesShape) {
-  return [
-    images.front,
-    images.detailChest,
-    images.detailNeck,
-    images.detailSleeve,
-    images.detailHand,
-    images.detailHem,
-    images.back,
-    images.fullBody,
-  ].filter((url): url is string => Boolean(url));
-}
 
 export async function POST(
   req: NextRequest,
@@ -93,8 +73,8 @@ export async function POST(
   }
   const set = setRaw as SetShape;
 
-  const primaryGarmentUrls = collectGarmentUrls(set.product_images);
-  if (primaryGarmentUrls.length === 0) {
+  const primaryGarmentReferences = collectGarmentReferences(set.product_images);
+  if (primaryGarmentReferences.length === 0) {
     return NextResponse.json(
       { error: "Set ini tidak punya foto warna utama tersimpan — tidak bisa tambah seri" },
       { status: 400 }
@@ -151,7 +131,13 @@ export async function POST(
       const result = await runNanoBananaGenerate({
         poseImageUrl: pose.reference_image_url,
         identityReferenceUrls,
-        garmentImageUrls: [...primaryGarmentUrls, entry.image],
+        garmentReferences: [
+          ...primaryGarmentReferences,
+          {
+            url: entry.image,
+            label: `TARGET COLOR FULL-BODY FLAT-LAY ("${entry.warna}") — this is the specific colorway being generated in this photo; use ONLY to determine color/fabric shade, not construction (see clause 2b)`,
+          },
+        ],
         // Background yang SAMA dgn foto utama set ini — dibuat sekali saat
         // set dibuat, TIDAK dihitung ulang lewat composeBackground() lagi
         // supaya scene tetap konsisten dgn foto utama/angle yang sudah ada.

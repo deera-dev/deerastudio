@@ -15,13 +15,32 @@
 // kalau saya bisa kasih prompt buat benerin beserta dengan image yang saya
 // maksud"): tambah field upload foto referensi OPSIONAL
 // (`allowImage: true`) — dipakai bareng catatan teks sbg acuan visual
-// tambahan saat regenerate (lihat correctionReferenceUrl di
+// tambahan saat regenerate (lihat correctionReferenceUrls di
 // lib/prompts/nano-banana-generate.ts). Kalau `allowImage` tidak di-set,
 // field foto tidak dirender sama sekali (dialog tetap bisa dipakai generik
 // utk kasus lain yang cuma butuh teks).
+//
+// REVISI (Agustus 2026 — admin: "di bagian generate ulang juga cuma bisa
+// upload 1 image aja, lebih bagus bisa banyak"): field foto referensi tunggal
+// (`imageUrl`) diganti jadi SAMPAI 3 slot (`imageUrls`), dirender sbg grid
+// 3 kolom kecil. Slot kosong tidak dikirim (difilter di handle()). Foto
+// HASIL GENERATE SEBELUMNYA (previous attempt) TIDAK diupload manual di sini
+// — itu otomatis disisipkan server-side dari output_image_url baris yang
+// sedang diregenerate, lihat app/api/generations/[id]/regenerate/route.ts.
+//
+// REVISI BESAR (Agustus 2026, sepaket dgn mode refine di lib/prompts/
+// nano-banana-generate.ts & app/api/generations/[id]/regenerate/route.ts):
+// tambah checkbox "Kunci Produk" opsional (`allowLockGarment: true`) —
+// kalau dicentang, koreksi ini TIDAK regenerate ulang dari flat-lay sama
+// sekali, cuma edit foto hasil sebelumnya (garment/model/background dikunci,
+// AI cuma ubah apa yg diminta di catatan). Default UNCHECKED — kalau
+// masalahnya justru soal garment (motif pudar, detail hilang), admin harus
+// BIARKAN tidak dicentang supaya AI regenerate ulang dari flat-lay lagi.
+const MAX_REFERENCE_IMAGES = 3;
+
 import { Fragment, useEffect, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
-import { Wand2 } from "lucide-react";
+import { Lock, Wand2 } from "lucide-react";
 import { Button } from "./Button";
 import { Textarea } from "./Field";
 import { ImageUploadField } from "./ImageUploadField";
@@ -35,9 +54,12 @@ type PromptOptions = {
   allowImage?: boolean;
   imageLabel?: string;
   imageHint?: string;
+  allowLockGarment?: boolean;
+  lockGarmentLabel?: string;
+  lockGarmentHint?: string;
 };
 
-export type PromptResult = { note: string; referenceImageUrl: string | null };
+export type PromptResult = { note: string; referenceImageUrls: string[]; lockGarment: boolean };
 
 type PromptState = PromptOptions & { resolve: (value: PromptResult | null) => void };
 
@@ -51,13 +73,17 @@ export function promptDialog(opts: PromptOptions): Promise<PromptResult | null> 
 export function PromptDialogHost() {
   const [state, setState] = useState<PromptState | null>(null);
   const [value, setValue] = useState("");
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<(string | null)[]>(
+    Array(MAX_REFERENCE_IMAGES).fill(null)
+  );
+  const [lockGarment, setLockGarment] = useState(false);
 
   useEffect(() => {
     openImpl = (opts) =>
       new Promise<PromptResult | null>((resolve) => {
         setValue("");
-        setImageUrl(null);
+        setImageUrls(Array(MAX_REFERENCE_IMAGES).fill(null));
+        setLockGarment(false);
         setState({ ...opts, resolve });
       });
     return () => {
@@ -116,15 +142,48 @@ export function PromptDialogHost() {
                 className={state?.allowImage ? "mb-4" : "mb-6"}
               />
               {state?.allowImage && (
-                <div className="mb-6 max-w-[180px]">
-                  <ImageUploadField
-                    label={state.imageLabel ?? "Foto Referensi (opsional)"}
-                    folder="corrections"
-                    value={imageUrl}
-                    onChange={setImageUrl}
-                    hint={state.imageHint}
-                  />
+                <div className="mb-6">
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-text-muted">
+                    {state.imageLabel ?? "Foto Referensi (opsional, sampai 3)"}
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {imageUrls.map((url, i) => (
+                      <ImageUploadField
+                        key={i}
+                        label={`Referensi ${i + 1}`}
+                        folder="corrections"
+                        value={url}
+                        onChange={(next) =>
+                          setImageUrls((prev) => prev.map((u, idx) => (idx === i ? next : u)))
+                        }
+                        aspect="aspect-square"
+                      />
+                    ))}
+                  </div>
+                  {state.imageHint && (
+                    <p className="mt-1.5 text-xs text-text-faint">{state.imageHint}</p>
+                  )}
                 </div>
+              )}
+              {state?.allowLockGarment && (
+                <label className="mb-6 flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/[0.1] bg-white/[0.03] px-3.5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={lockGarment}
+                    onChange={(e) => setLockGarment(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-transparent accent-gold"
+                  />
+                  <span>
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-text">
+                      <Lock className="h-3.5 w-3.5 text-gold" />
+                      {state.lockGarmentLabel ?? "Kunci Produk — jangan generate ulang dari foto asli"}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-text-faint">
+                      {state.lockGarmentHint ??
+                        "Pakai kalau produk di hasil sebelumnya SUDAH benar dan cuma pose/background/ketajaman yang mau diperbaiki. AI mengedit foto sebelumnya, bukan menggambar ulang produk. Jangan centang kalau masalahnya soal motif/detail produk itu sendiri."}
+                    </span>
+                  </span>
+                </label>
               )}
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => handle(null)}>
@@ -133,7 +192,13 @@ export function PromptDialogHost() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => handle({ note: value.trim(), referenceImageUrl: imageUrl })}
+                  onClick={() =>
+                    handle({
+                      note: value.trim(),
+                      referenceImageUrls: imageUrls.filter((u): u is string => Boolean(u)),
+                      lockGarment,
+                    })
+                  }
                 >
                   {state?.confirmLabel ?? "Generate Ulang"}
                 </Button>

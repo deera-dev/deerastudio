@@ -53,10 +53,43 @@
 // utk role "utama"/"angle"/"seri" (full re-render lewat Nano Banana Pro) —
 // TIDAK utk kolase_gabungan/kolase_detail/detail (crop/composite, bukan
 // re-render, jadi tidak relevan dikasih instruksi konten).
+//
+// REVISI (Agustus 2026 — admin: "di bagian generate ulang juga cuma bisa
+// upload 1 image aja, lebih bagus bisa banyak, dan ada reference dari hasil
+// yang di generate sebelumnya, dan AI menggunakan foto reference beserta
+// image baru yang diupload untuk menyesuaikan hasil ditambah prompt juga"):
+// `referenceImageUrl` (singular) diganti `referenceImageUrls` (array, sampai
+// 3, lihat components/ui/PromptDialog.tsx). Selain itu, SEBELUM baris `gen`
+// ditimpa dgn hasil baru, `gen.output_image_url` (hasil percobaan
+// SEBELUMNYA milik baris yang sedang diregenerate) otomatis diteruskan sbg
+// `previousResultUrl` ke runNanoBananaGenerate — admin tidak perlu upload
+// manual, AI langsung dikasih lihat persis apa yg dihasilkan terakhir kali
+// utk dibandingkan dgn correctionNote (lihat lib/prompts/
+// nano-banana-generate.ts).
+//
+// REVISI BESAR (Agustus 2026, sepaket dgn rewrite prompt — lihat header
+// lib/prompts/nano-banana-generate.ts): dua perubahan besar —
+// (1) collectGarmentUrls() lokal diganti collectGarmentReferences() +
+//     prioritizeUrl() diganti prioritizeReference() (label per-foto, sama
+//     seperti generate-set/route.ts).
+// (2) `lockGarment` (BARU, dari checkbox "Kunci Produk" di dialog regenerate
+//     — components/ui/PromptDialog.tsx): kalau true DAN ada `note` DAN baris
+//     ini sudah punya output_image_url, TIDAK panggil runNanoBananaGenerate
+//     (yg regenerate ulang dari flat-lay) sama sekali — panggil
+//     runNanoBananaRefine() sbg gantinya (garment/model/background hasil
+//     SEBELUMNYA dikunci, AI cuma boleh ubah apa yg diminta di note). Kalau
+//     lockGarment false (default) atau baris belum pernah generate, behavior
+//     LAMA tetap jalan (full regenerate dari flat-lay).
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { runNanoBananaGenerate } from "@/lib/prompts/nano-banana-generate";
+import {
+  runNanoBananaGenerate,
+  runNanoBananaRefine,
+  prioritizeReference,
+  collectGarmentReferences,
+  type ProductImagesShape,
+} from "@/lib/prompts/nano-banana-generate";
 import { runDetailCrop } from "@/lib/prompts/stage2";
 import { composeBackground, type BackgroundMode } from "@/lib/prompts/background-composer";
 import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-template/set-collage";
@@ -65,9 +98,12 @@ import type { BackgroundPresetRow, Generation } from "@/types/database";
 
 const requestSchema = z.object({
   note: z.string().trim().max(500).optional(),
-  // REVISI — foto referensi tambahan opsional (lihat catatan correctionNote
-  // di lib/prompts/nano-banana-generate.ts & components/ui/PromptDialog.tsx).
-  referenceImageUrl: z.string().url().optional(),
+  // REVISI — foto referensi tambahan opsional (lihat catatan
+  // correctionReferenceUrls di lib/prompts/nano-banana-generate.ts &
+  // components/ui/PromptDialog.tsx). Maks 3 sesuai jumlah slot di dialog.
+  referenceImageUrls: z.array(z.string().url()).max(3).optional(),
+  // REVISI BESAR — lihat catatan (2) di atas.
+  lockGarment: z.boolean().optional().default(false),
 });
 
 const DETAIL_FOCUS_AREAS = [
@@ -83,30 +119,6 @@ const IDENTITY_REFERENCE_COUNT = 2;
 const COST_FULL_PASS = 2700;
 const COST_DERIVED = 640;
 
-type ProductImagesShape = {
-  front: string;
-  back?: string;
-  detailNeck?: string;
-  detailSleeve?: string;
-  detailHand?: string;
-  detailChest?: string;
-  detailHem?: string;
-  fullBody?: string;
-};
-
-function collectGarmentUrls(images: ProductImagesShape) {
-  return [
-    images.front,
-    images.detailChest,
-    images.detailNeck,
-    images.detailSleeve,
-    images.detailHand,
-    images.detailHem,
-    images.back,
-    images.fullBody,
-  ].filter((url): url is string => Boolean(url));
-}
-
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -117,7 +129,8 @@ export async function POST(
   const rawBody = await req.json().catch(() => ({}));
   const parsedBody = requestSchema.safeParse(rawBody);
   const note = parsedBody.success ? parsedBody.data.note : undefined;
-  const referenceImageUrl = parsedBody.success ? parsedBody.data.referenceImageUrl : undefined;
+  const referenceImageUrls = parsedBody.success ? parsedBody.data.referenceImageUrls : undefined;
+  const lockGarment = parsedBody.success ? parsedBody.data.lockGarment : false;
   const supabase = await createClient();
 
   const { data: gen, error: genError } = await supabase
@@ -143,6 +156,35 @@ export async function POST(
 
   try {
     if (gen.image_role === "utama" || gen.image_role === "angle" || gen.image_role === "seri") {
+      // REVISI BESAR — mode REFINE/KOREKSI: admin centang "Kunci Produk" di
+      // dialog (components/ui/PromptDialog.tsx), garment/model/background
+      // hasil SEBELUMNYA dikunci, TIDAK regenerate ulang dari flat-lay sama
+      // sekali — cuma edit foto yang sudah ada via runNanoBananaRefine().
+      // Return awal SEBELUM fetch pose/identity/background (tidak perlu
+      // di mode ini). Kalau lockGarment true tapi tidak ada note ATAU baris
+      // ini belum pernah punya output_image_url, fallback diam-diam ke
+      // full-regenerate biasa di bawah (aman, tidak ada gambar utk dikunci).
+      if (lockGarment && note && gen.output_image_url) {
+        const result = await runNanoBananaRefine({
+          previousResultUrl: gen.output_image_url,
+          correctionNote: note,
+          correctionReferenceUrls: referenceImageUrls?.length ? referenceImageUrls : undefined,
+        });
+
+        await supabase
+          .from("ai_generations")
+          .update({
+            vto_image_url: null,
+            output_image_url: result.imageUrl,
+            status: "completed",
+            generation_time_ms: result.generationTimeMs,
+            cost: COST_FULL_PASS,
+          })
+          .eq("id", id);
+
+        return NextResponse.json({ status: "completed", imageUrl: result.imageUrl });
+      }
+
       const isSeri = gen.image_role === "seri";
       const variantImages = gen.variant_product_images as Record<string, string> | null;
       if (isSeri && !variantImages?.image) {
@@ -184,17 +226,32 @@ export async function POST(
         forcedPresetId: set.background_preset_id ?? undefined,
       });
 
-      // REVISI hemat-foto: utk seri, garmentImageUrls = SEMUA foto warna
+      // REVISI hemat-foto: utk seri, garmentReferences = SEMUA foto warna
       // utama (referensi bentuk/tekstur/bordir) + SATU foto warna target itu
       // sendiri (referensi warna) — sama seperti generate-set/route.ts.
-      const garmentImageUrls = isSeri
-        ? [...collectGarmentUrls(set.product_images), variantImages!.image]
-        : collectGarmentUrls(set.product_images);
+      // REVISI BESAR — sekarang tiap entri bawa label perannya (lihat
+      // collectGarmentReferences di lib/prompts/nano-banana-generate.ts).
+      let garmentReferences = isSeri
+        ? [
+            ...collectGarmentReferences(set.product_images),
+            {
+              url: variantImages!.image,
+              label: `TARGET COLOR FULL-BODY FLAT-LAY ("${gen.variant_warna ?? ""}") — this is the specific colorway being generated in this photo; use ONLY to determine color/fabric shade, not construction (see clause 2b)`,
+            },
+          ]
+        : collectGarmentReferences(set.product_images);
+      // REVISI (fidelity, Agustus 2026) — sama seperti generate-set/route.ts:
+      // utk "angle" (back view), foto "Belakang" (kalau ada) dipindah jadi
+      // gambar produk PERTAMA supaya klausa BACK VIEW REFERENCE PRIORITY di
+      // prompt lebih kuat.
+      if (gen.image_role === "angle") {
+        garmentReferences = prioritizeReference(garmentReferences, set.product_images.back);
+      }
 
       const result = await runNanoBananaGenerate({
         poseImageUrl: pose!.reference_image_url,
         identityReferenceUrls,
-        garmentImageUrls,
+        garmentReferences,
         backgroundDescription: background.description,
         productWarna: isSeri ? gen.variant_warna ?? undefined : set.product_warna ?? undefined,
         isColorVariant: isSeri,
@@ -203,7 +260,17 @@ export async function POST(
         // merender ulang scene yang sama dari sisi belakang model.
         isBackView: gen.image_role === "angle",
         correctionNote: note || undefined,
-        correctionReferenceUrl: referenceImageUrl || undefined,
+        // previousResultUrl & correctionReferenceUrls HANYA relevan kalau
+        // ada `note` — di buildPrompt() keduanya cuma dijelaskan di dalam
+        // klausa CORRECTION yang digerbang oleh correctionNote. Tanpa note
+        // (regenerate biasa, cuma re-roll seed), jangan kirim gambar
+        // tambahan tanpa konteks teks — bisa membingungkan model krn
+        // dianggap referensi tak dijelaskan. `gen` diambil di awal request,
+        // SEBELUM baris ini ditimpa hasil baru — output_image_url di sini
+        // masih hasil percobaan SEBELUMNYA.
+        previousResultUrl: note && gen.output_image_url ? gen.output_image_url : undefined,
+        correctionReferenceUrls:
+          note && referenceImageUrls?.length ? referenceImageUrls : undefined,
       });
 
       await supabase

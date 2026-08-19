@@ -269,6 +269,20 @@ export default function HistoryPage() {
   // cuma compositing/crop), tanya dulu lewat promptDialog apa yang mau
   // diperbaiki — diteruskan sbg correctionNote (lihat app/api/generations/
   // [id]/regenerate/route.ts & lib/prompts/nano-banana-generate.ts).
+  //
+  // REVISI (Agustus 2026 — admin: "di bagian generate ulang juga cuma bisa
+  // upload 1 image aja, lebih bagus bisa banyak, dan ada reference dari
+  // hasil yang di generate sebelumnya"): dialog sekarang bisa terima sampai
+  // 3 foto referensi (referenceImageUrls, array) — hasil percobaan
+  // SEBELUMNYA sendiri TIDAK perlu diupload di sini, sudah otomatis
+  // disisipkan server-side dari output_image_url baris ini (lihat regenerate/
+  // route.ts), jadi hint dialog disesuaikan.
+  //
+  // REVISI BESAR (Agustus 2026, sepaket dgn mode refine — lihat header
+  // lib/prompts/nano-banana-generate.ts): dialog sekarang juga tawarkan
+  // checkbox "Kunci Produk" (allowLockGarment) — kalau dicentang, koreksi
+  // ini TIDAK regenerate dari flat-lay, cuma edit foto sebelumnya (garment
+  // dikunci). Dikirim sbg `lockGarment` ke endpoint regenerate.
   async function handleRegenerate(genId: string) {
     if (!selected) return;
     const gen = selected.ai_generations.find((g) => g.id === genId);
@@ -276,21 +290,24 @@ export default function HistoryPage() {
       gen?.image_role === "utama" || gen?.image_role === "angle" || gen?.image_role === "seri";
 
     let note: string | undefined;
-    let referenceImageUrl: string | undefined;
+    let referenceImageUrls: string[] | undefined;
+    let lockGarment = false;
     if (supportsNote) {
       const result = await promptDialog({
         title: `Generate Ulang — ${ROLE_LABELS[gen!.image_role] ?? gen!.image_role}`,
         description:
-          "Kalau hasil sebelumnya ada yang kurang pas, tulis di sini apa yang mau diperbaiki (Inggris lebih akurat) — AI diprioritaskan memperbaiki itu, bukan cuma coba ulang dgn seed acak. Kosongkan aja kalau cuma mau coba ulang biasa.",
+          "Kalau hasil sebelumnya ada yang kurang pas, tulis di sini apa yang mau diperbaiki (Inggris lebih akurat) — AI diprioritaskan memperbaiki itu, bukan cuma coba ulang dgn seed acak, dan hasil sebelumnya otomatis dijadikan acuan supaya AI tahu persis apa yg mau dikoreksi. Kosongkan aja kalau cuma mau coba ulang biasa.",
         placeholder: "mis. remove the bookshelf in the background, make the pose more relaxed...",
         confirmLabel: "Generate Ulang",
         allowImage: true,
-        imageLabel: "Foto Referensi (opsional)",
+        imageLabel: "Foto Referensi Tambahan (opsional, sampai 3)",
         imageHint: "Contoh foto yang menunjukkan maksud perbaikan (pose/background/detail) — AI pakai ini sbg acuan visual tambahan, bukan pengganti foto produk/model.",
+        allowLockGarment: true,
       });
       if (result === null) return; // dibatalkan dari dialog
       note = result.note;
-      referenceImageUrl = result.referenceImageUrl ?? undefined;
+      referenceImageUrls = result.referenceImageUrls.length ? result.referenceImageUrls : undefined;
+      lockGarment = result.lockGarment;
     }
 
     setRegeneratingId(genId);
@@ -298,7 +315,7 @@ export default function HistoryPage() {
       const res = await fetch(`/api/generations/${genId}/regenerate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note: note || undefined, referenceImageUrl }),
+        body: JSON.stringify({ note: note || undefined, referenceImageUrls, lockGarment }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Regenerate gagal");
