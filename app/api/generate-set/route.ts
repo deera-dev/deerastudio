@@ -160,6 +160,24 @@ import type { AccessoryPresetRow, BackgroundPresetRow } from "@/types/database";
 // dihapus dari alur generate-set). Masih dipakai di app/api/generations/
 // [id]/regenerate/route.ts utk kompatibilitas riwayat lama, sengaja TIDAK
 // dihapus dari sana.
+//
+// BUG FIX (Agustus 2026 — admin: baris generation kadang STUCK selamanya di
+// status "processing" walau sudah di-generate ulang berkali-kali): handler
+// ini generate BEBERAPA foto SINKRON dalam 1 request (bisa >1 menit total,
+// lihat "CATATAN PRODUKSI" di paling atas file) — tanpa `maxDuration`
+// eksplisit, Next.js/Vercel pakai batas waktu function DEFAULT platform
+// (Hobby ~10s, Pro ~15s tanpa konfigurasi) yang jauh LEBIH PENDEK dari itu.
+// Kalau function di-kill platform di tengah jalan, request berhenti begitu
+// saja SETELAH baris `ai_generations` sempat di-update ke "processing" tapi
+// SEBELUM update akhir (sukses/gagal) sempat jalan — baris itu permanen
+// "processing" dgn foto lama yang stale, tidak pernah ke-update lagi.
+// `maxDuration = 300` memberi jatah waktu maksimal yang jauh lebih longgar
+// (dibatasi otomatis ke batas plan Vercel yang sebenarnya — Hobby tetap
+// dibatasi ke 60s oleh platform, Pro bisa sampai 300s). Fix yang SAMA
+// diterapkan di app/api/generations/[id]/regenerate/route.ts &
+// app/api/generation-sets/[id]/add-seri/route.ts (dua endpoint lain yang
+// juga panggil fal.subscribe scr sinkron di dalam 1 request).
+export const maxDuration = 300;
 
 const productImagesSchema = z.object({
   front: z.string().url(),

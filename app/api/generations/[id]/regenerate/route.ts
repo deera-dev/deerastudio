@@ -96,6 +96,16 @@ import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-temp
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import type { BackgroundPresetRow, Generation } from "@/types/database";
 
+// BUG FIX (Agustus 2026 — admin: klik "Generate Ulang", status baris tetap
+// "processing" selamanya walau diulang lagi, foto di panel Video juga tidak
+// nambah krn baris itu tidak pernah dianggap "completed"): lihat catatan
+// lengkap di app/api/generate-set/route.ts — root cause-nya SAMA, endpoint
+// ini juga panggil fal.subscribe scr sinkron tanpa `maxDuration` eksplisit,
+// jadi bisa di-kill platform di tengah jalan (setelah status di-set
+// "processing" tapi sebelum update akhir jalan), meninggalkan baris stuck
+// permanen. `maxDuration = 300` memberi jatah waktu jauh lebih longgar.
+export const maxDuration = 300;
+
 const requestSchema = z.object({
   note: z.string().trim().max(500).optional(),
   // REVISI — foto referensi tambahan opsional (lihat catatan

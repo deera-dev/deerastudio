@@ -317,13 +317,22 @@ export default function HistoryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ note: note || undefined, referenceImageUrls, lockGarment }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Regenerate gagal");
       toast.success("Gambar berhasil digenerate ulang");
-      await refreshOne(selected.id);
     } catch (err) {
+      // BUG FIX (Agustus 2026 — admin: baris tetap kelihatan "processing" di
+      // UI walau regenerate sudah gagal/timeout): dulu refreshOne() cuma
+      // dipanggil di jalur sukses — kalau request gagal (mis. 504 dari
+      // Vercel function timeout, lihat maxDuration di app/api/generations/
+      // [id]/regenerate/route.ts), UI lama tetap tampil sampai admin refresh
+      // manual. Sekarang refetch selalu jalan di kedua jalur supaya UI
+      // langsung mencerminkan status TERKINI di DB (baik "failed" kalau
+      // server sempat sempat nulis error, maupun tetap "processing" kalau
+      // benar2 masih berjalan/stuck — setidaknya tidak diam2 salah tampil).
       toast.error(err instanceof Error ? err.message : "Regenerate gagal");
     } finally {
+      await refreshOne(selected.id);
       setRegeneratingId(null);
     }
   }

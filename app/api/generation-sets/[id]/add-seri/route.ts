@@ -27,6 +27,13 @@ import {
 } from "@/lib/prompts/nano-banana-generate";
 import type { AccessoryPresetRow } from "@/types/database";
 
+// BUG FIX (Agustus 2026) — sama seperti app/api/generate-set/route.ts &
+// app/api/generations/[id]/regenerate/route.ts: endpoint ini juga panggil
+// fal.subscribe scr sinkron per warna dalam 1 request tanpa `maxDuration`
+// eksplisit, berisiko sama (baris stuck di "processing" kalau function
+// di-kill platform di tengah jalan).
+export const maxDuration = 300;
+
 const requestSchema = z.object({
   seriEntries: z
     .array(z.object({ warna: z.string(), image: z.string().url() }))
