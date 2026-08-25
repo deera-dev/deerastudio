@@ -58,6 +58,24 @@
 // baru yang modelnya SUDAH pakai jilbab pendek dari awal (app/poses/page.tsx)
 // — belum diusulkan/dikonfirmasi ke admin, prompt-only fix ini dicoba dulu.
 //
+// REVISI (Agustus 2026 — admin: "saya mau dihalaman generate image product,
+// background yang digunakan adalah warna kontras dari produknya ditambah
+// aksen pemanis yang sama dengan warna produk, jadi produknya bisa terlihat
+// bold dan cantik"): klausa 5 (BACKGROUND & SETTING) ditambah aturan
+// COLOR RELATIONSHIP — background dominan HARUS kontras dgn warna garment,
+// + 1-2 aksen dekoratif kecil warna SENADA garment sbg pemanis. Sengaja
+// TIDAK dibangun dari lookup tabel nama warna Indonesia (mis. "COKKAT",
+// "OLD SAGE", "MILO" — data nyata di tabel products.warna, free-text & banyak
+// typo/variasi, lihat lib/prompts/background-composer.ts) krn fragile & tidak
+// scalable. Sebagai gantinya, instruksi merujuk ke warna ASLI garment yang
+// SUDAH terlihat AI lewat foto PRODUCT REFERENCE di request generate yang
+// SAMA — jauh lebih akurat & tidak bergantung teks productWarna yang bisa
+// typo/ambigu. Berlaku SERAGAM di semua sumber background (preset kurasi
+// ATAU ai_improvised) krn ditaruh di klausa final, bukan di komponen teks
+// background itu sendiri — lihat composeImprovised() di background-composer
+// yang jadi lebih ringkas sbg konsekuensinya (klausa aksen warna lama di
+// sana DIHAPUS, sudah digantikan sepenuhnya oleh klausa 5 di sini).
+//
 // REVISI (Agustus 2026 — admin masih lihat jilbab panjang di tampak belakang
 // setelah revisi di atas, eksplisit: "saya mau WAJIB jilbab sampai leher
 // saja"): klausa 6 & baris verifikasi penutup ditulis ulang lagi, kali ini
@@ -349,7 +367,7 @@ function buildPrompt(input: NanoBananaGenerateInput): string {
       ? "4. POSE & BODY LANGUAGE (BACK VIEW — critical): one of the MODEL REFERENCE images already shows this exact model with her BACK to the camera — reproduce that same back-facing standing pose and camera framing, facing AWAY from the camera the entire time, showing the back of the garment FULLY VISIBLE (see clause 6 for the short-hijab requirement this depends on). Full body visible head to toe, face NOT visible anywhere in the image. Within that constraint, keep the posture relaxed and natural rather than mannequin-like — relaxed shoulders, natural arm position, slight natural weight shift, relaxed hands — but do not bend or twist the body in a way that distorts how the garment hangs or hides any back garment detail. Do not crop the garment."
       : "4. POSE & BODY LANGUAGE: a natural standing full-body fashion catalog pose, full body visible head to toe. Use the MODEL REFERENCE images primarily to preserve her exact identity, body proportions, and general pose/framing intent. The pose should look relaxed and natural rather than mannequin-like — subtle realistic asymmetry such as relaxed shoulders, natural arm position, slight natural weight shift, relaxed hands, and natural elbow positioning is encouraged. Do not create exaggerated fashion poses, and do not bend or twist the body in a way that changes how the garment should naturally hang or hides any garment detail. Do not crop the garment. Do not zoom into just the face.",
     "",
-    `5. BACKGROUND & SETTING: ${input.backgroundDescription}. The background must complement the garment and remain secondary to it — clean, elegant, premium studio/interior atmosphere suitable for an established Indonesian Muslim fashion brand. No distracting objects, no fantasy environment, no obviously AI-generated background.`,
+    `5. BACKGROUND & SETTING: ${input.backgroundDescription}. COLOR RELATIONSHIP (critical, admin request — the goal is for the garment to look "bold dan cantik", clearly popping against the scene rather than blending into it): the background's DOMINANT color — walls, floor, large surfaces, drapery — must be a BOLD, CLEAR CONTRAST to the garment's actual color as seen in the PRODUCT REFERENCE (flat-lay) images, not a similar or matching color family. Pair a warm garment color with a cooler background (or vice versa), a dark/deep garment color with a lighter/brighter background (or vice versa), and a muted/soft garment color with a more saturated background — whatever creates the strongest, most flattering visual separation for THIS specific garment color. Then add exactly ONE or TWO small decorative accent details within the scene (e.g. a vase of flowers, a folded textile drape, a small styling prop, trim on a piece of furniture) in a color that closely MATCHES the garment's actual color — this accent is a deliberate "sweetener" that visually ties the model back into the scene without competing with the contrast. Do not render the background's dominant color in the same family as the garment, and do not skip the small matching accent. Beyond this color relationship, the background must complement the garment and remain secondary to it — clean, elegant, premium studio/interior atmosphere suitable for an established Indonesian Muslim fashion brand. No distracting objects, no fantasy environment, no obviously AI-generated background.`,
     "",
     input.isBackView
       ? "6. STYLING (BACK VIEW — MANDATORY, NON-NEGOTIABLE, NO EXCEPTIONS): the hijab in THIS image MUST end AT THE NECK — it must NOT extend past the neckline onto the shoulders at all, and must NOT cover any part of the shoulders or back. Picture a short neck-wrap or turban-style hijab that stops exactly at the base of the neck/top of the shoulders — nothing below that line. This is a hard requirement, not a suggestion. This rule OVERRIDES every reference image without exception: even though the back-facing MODEL REFERENCE photo (and possibly other MODEL REFERENCE photos) shows this model wearing a LONGER hijab that covers her shoulders and drapes down her back, you must NOT copy that hijab length here — treat those reference photos as showing her FACE, HAIR-LINE, and BODY only, and deliberately crop the hijab up to neck-length in your output regardless of how it looks in every reference photo. The hijab is secondary to the garment: ANY hijab fabric touching the shoulders, upper back, or any part of the garment is WRONG and must be corrected before finalizing — there is no acceptable amount of shoulder coverage. The entire back of the garment — collar, shoulders, back panel, closure, embroidery/motif, seams, hemline, from the very top of the shoulders all the way down — must be 100% visible with zero fabric obstruction. Natural makeup, minimal jewelry. Do not invent accessories that conflict with the product."
