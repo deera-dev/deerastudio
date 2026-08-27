@@ -1,37 +1,46 @@
-// POST /api/generation-sets/:id/color-lineup — Agustus 2026.
-// Admin: "tambahin 1 lagi ya untuk serian warna, saya mau masukin jadi 1
-// foto aja digantung dengan hanger tanpa merubah detail sedikit pun,
-// nantinya 1 produk tersebut akan bersandingan dengan produk yang sama,
-// hanya serian warnanya saja yang berbeda". Lihat penjelasan lengkap
-// (kenapa BUKAN panggilan AI) di types/database.ts (ImageRole "kolase_warna")
-// & lib/image-template/color-lineup.tsx.
+// POST /api/generation-sets/:id/color-lineup — Agustus 2026, REVISI BESAR.
+// Admin awalnya minta "tambahin 1 lagi ya untuk serian warna, saya mau
+// masukin jadi 1 foto aja digantung dengan hanger tanpa merubah detail
+// sedikit pun" — versi PERTAMA endpoint ini murni compositing (TANPA AI).
+// Setelah dikirimi referensi foto "colorway lineup" editorial (garment
+// digantung rapi di hanger rail / fanned overlapping, styling studio
+// premium — lihat reference yang dikirim admin) dan diminta "versi yang
+// lebih bagusnya", endpoint ini PIVOT ke AI generation (Nano Banana Pro,
+// lihat lib/prompts/color-lineup-generate.ts utk penjelasan lengkap +
+// bagaimana "jangan ubah detail produk" tetap dijaga lewat prompt).
 //
-// Sumber foto per warna:
-// - Warna utama -> set.product_images.fullBody (kalau ada) atau .front
-//   (fallback wajib ada, satu-satunya field wajib di productImagesSchema).
+// Sumber FOTO REFERENSI per warna (dikirim ke AI sbg reference images, BUKAN
+// dipakai literal sbg output lagi — beda dari versi pertama):
+// - Warna utama -> set.product_images.fullBody (kalau ada) atau .front.
 //   Label warnanya set.product_warna, atau "Utama" kalau kosong.
 // - Tiap warna seri -> baris ai_generations role "seri" milik set ini,
 //   field variant_product_images.image (foto ASLI full-body yang diupload
-//   admin utk warna itu — BUKAN output_image_url hasil generate AI-nya).
-//   Label warnanya variant_warna.
-// Baris "seri" yang gagal/belum selesai generate AI-nya TETAP ikut disini
-// selama variant_product_images.image ada — lineup ini tidak bergantung
-// sama sekali pada status generate AI role "seri".
+//   admin utk warna itu — BUKAN output_image_url hasil generate AI role
+//   "seri"-nya, supaya tidak numpuk 2 lapis AI generation).
 //
 // Idempotent per set: kalau set ini SUDAH pernah generate lineup (ada baris
 // image_role="kolase_warna"), panggilan berikutnya nge-UPDATE baris yang
-// sama (bukan bikin baris baru) — jadi admin bisa klik ulang kapan saja
-// habis nambah warna seri baru tanpa numpuk baris kolase_warna.
+// sama (bukan bikin baris baru).
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { renderColorLineupPng, type ColorLineupEntry } from "@/lib/image-template/color-lineup";
+import { runColorLineupGenerate, type ColorLineupReference } from "@/lib/prompts/color-lineup-generate";
+import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import type { ProductImagesShape } from "@/lib/prompts/nano-banana-generate";
 
-// Render foto (fetch beberapa gambar remote + Satori) — bukan panggilan AI,
-// tapi tetap dikasih jatah lebih dari default Vercel (~10-15s) sbg jaga-jaga
-// kalau storage/CDN foto lambat, konsisten dgn maxDuration di route lain.
-export const maxDuration = 60;
+// Panggilan AI sinkron (fal.subscribe) — jatah waktu longgar, konsisten dgn
+// route lain yg panggil Nano Banana Pro (lihat catatan BUG FIX maxDuration
+// di app/api/generations/[id]/regenerate/route.ts).
+export const maxDuration = 300;
+
+const requestSchema = z.object({
+  style: z.enum(["hanger", "fanned"]).optional().default("hanger"),
+  styleNote: z.string().trim().max(300).optional(),
+});
+
+// Estimasi Rp — 1x panggilan Nano Banana Pro, sama seperti foto lain.
+const COST_LINEUP = 2700;
 
 type SetShape = {
   id: string;
@@ -45,6 +54,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const rawBody = await req.json().catch(() => ({}));
+  const parsedBody = requestSchema.safeParse(rawBody);
+  const style = parsedBody.success ? parsedBody.data.style : "hanger";
+  const styleNote = parsedBody.success ? parsedBody.data.styleNote : undefined;
+
   const supabase = await createClient();
 
   const { data: setRaw, error: setError } = await supabase
@@ -72,17 +86,17 @@ export async function POST(
     .eq("image_role", "seri")
     .order("created_at", { ascending: true });
 
-  const entries: ColorLineupEntry[] = [
+  const references: ColorLineupReference[] = [
     { url: mainUrl, label: set.product_warna || "Utama" },
     ...((seriRows ?? []) as { variant_warna: string | null; variant_product_images: Record<string, string> | null }[])
       .map((r) => {
         const url = r.variant_product_images?.image;
         return url ? { url, label: r.variant_warna || "Warna" } : null;
       })
-      .filter((e): e is ColorLineupEntry => e !== null),
+      .filter((e): e is ColorLineupReference => e !== null),
   ];
 
-  if (entries.length < 2) {
+  if (references.length < 2) {
     return NextResponse.json(
       {
         error:
@@ -91,9 +105,26 @@ export async function POST(
       { status: 400 }
     );
   }
+  if (references.length > 7) {
+    return NextResponse.json(
+      { error: "Maksimal 7 warna (1 utama + 6 seri) per lineup — kurangi warna seri dulu" },
+      { status: 400 }
+    );
+  }
 
   try {
-    const buffer = await renderColorLineupPng({ productKode: set.product_kode, entries });
+    const generated = await runColorLineupGenerate({
+      references,
+      productKode: set.product_kode,
+      style,
+      styleNote,
+    });
+
+    const buffer = await renderColorLineupPng({
+      heroImageUrl: generated.imageUrl,
+      productKode: set.product_kode,
+      colorLabels: references.map((r) => r.label),
+    });
     const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
 
     // Idempotent — cari baris kolase_warna yang SUDAH ADA di set ini dulu.
@@ -107,7 +138,13 @@ export async function POST(
     if (existing) {
       await supabase
         .from("ai_generations")
-        .update({ output_image_url: url, status: "completed", cost: 0, error_message: null })
+        .update({
+          output_image_url: url,
+          status: "completed",
+          generation_time_ms: generated.generationTimeMs,
+          cost: COST_LINEUP,
+          error_message: null,
+        })
         .eq("id", existing.id);
       return NextResponse.json({ generationId: existing.id, imageUrl: url });
     }
@@ -124,8 +161,8 @@ export async function POST(
         output_image_url: url,
         has_stage2: true,
         status: "completed",
-        generation_time_ms: null,
-        cost: 0,
+        generation_time_ms: generated.generationTimeMs,
+        cost: COST_LINEUP,
       })
       .select()
       .single();

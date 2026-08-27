@@ -147,15 +147,21 @@ export interface VideoClipJob {
 // lib/image-template/set-collage.tsx), makanya `cost` selalu 0 utk kedua
 // role ini.
 //
-// "kolase_warna" (BARU Agustus 2026 — admin: "tambahin 1 lagi ya untuk
-// serian warna, saya mau masukin jadi 1 foto aja... tanpa merubah detail
-// sedikit pun"): 1 foto yang menyandingkan SEMUA warna varian produk yang
-// sama dalam 1 gambar. SAMA SEKALI BUKAN panggilan AI (beda dari role "seri"
-// yang tetap generate lewat Nano Banana Pro) — cuma compositing foto ASLI
-// yang sudah diupload admin per warna (lihat lib/image-template/
-// color-lineup.tsx & app/api/generation-sets/[id]/color-lineup/route.ts),
-// menjamin 100% tidak ada perubahan detail produk krn tidak ada AI yang
-// menyentuh gambarnya. `cost` selalu 0, `pose_id`/`variant_warna`/
+// "kolase_warna" (BARU Agustus 2026, REVISI BESAR — admin awalnya minta
+// "tambahin 1 lagi ya untuk serian warna, saya mau masukin jadi 1 foto
+// aja... tanpa merubah detail sedikit pun", lalu setelah dikirimi referensi
+// foto "colorway lineup" editorial (garment digantung rapi di hanger rail /
+// fanned overlapping, styling studio premium) diminta "versi yang lebih
+// bagusnya"): 1 foto yang menyandingkan SEMUA warna varian produk yang sama
+// dalam 1 scene premium. PANGGILAN AI (Nano Banana Pro, via
+// runColorLineupGenerate — sama seperti role "seri") — foto ASLI yang sudah
+// diupload admin per warna dikirim sbg REFERENCE images, bukan ditempel
+// literal lagi seperti versi pertama (lihat lib/prompts/
+// color-lineup-generate.ts & lib/image-template/color-lineup.tsx &
+// app/api/generation-sets/[id]/color-lineup/route.ts). Fidelity produk (tidak
+// boleh berubah desain/warna) dijaga lewat prompt "blueprint/absolute source
+// of truth" yang eksplisit, BUKAN lagi lewat ketiadaan AI. `cost` mengikuti
+// COST_FULL_PASS (sama seperti utama/angle/seri), `pose_id`/`variant_warna`/
 // `variant_product_images` selalu null utk role ini (bukan milik 1 warna
 // spesifik, agregat semua warna dalam set).
 export type ImageRole =

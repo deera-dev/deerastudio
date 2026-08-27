@@ -21,7 +21,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Camera, History, LayoutDashboard, Megaphone, Palette, UsersRound, Wand2 } from "lucide-react";
+import { Camera, History, LayoutDashboard, Megaphone, Palette, Shirt, UsersRound, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import KineticGrid from "@/components/ui/KineticGrid";
 import { LogoutButton } from "./LogoutButton";
@@ -34,6 +34,10 @@ const NAV = [
   { href: "/generate", label: "Generate", icon: Wand2 },
   { href: "/history", label: "History", icon: History },
   { href: "/content", label: "Content Studio", icon: Megaphone },
+  // Halaman baru (Agustus 2026, REVISI BESAR) — dipisah dari History krn
+  // admin minta "bikin fitur baru kan saya bilang" (bukan tombol nempel di
+  // panel detail History). Lihat app/lineup-warna/page.tsx.
+  { href: "/lineup-warna", label: "Lineup Warna", icon: Shirt },
 ];
 
 // Rail ikon desktop — kapsul mengambang vertikal-tengah, cuma ikon (tanpa

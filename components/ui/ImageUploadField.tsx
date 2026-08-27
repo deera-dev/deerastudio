@@ -25,6 +25,18 @@ export function ImageUploadField({
   required = false,
   hint,
   aspect = "aspect-[3/4]",
+  // REVISI (Agustus 2026 — dipakai di app/lineup-warna/page.tsx utk ganti
+  // foto referensi warna: field itu WAJIB selalu ada isinya, tidak boleh
+  // pernah kosong. Sebelumnya tombol "X" di sini memanggil onChange(null),
+  // tapi kalau parent-nya cuma terima value baru yang non-null (pola
+  // "replace" — lihat handleReplacePhoto di lineup-warna/page.tsx), klik X
+  // jadi TIDAK NGAPA-NGAPAIN sama sekali (admin: "gabisa upload ulang
+  // bego") krn parent diam-diam menolak update ke null, foto lama tetap
+  // nyangkut. allowClear=false menyembunyikan tombol X sepenuhnya —
+  // satu-satunya cara ganti foto jadi klik/drag foto baru langsung ke
+  // kotaknya (root dropzone selalu bisa diklik utk buka file picker,
+  // terlepas dari ada-tidaknya tombol X).
+  allowClear = true,
 }: {
   label: string;
   folder: string;
@@ -33,6 +45,7 @@ export function ImageUploadField({
   required?: boolean;
   hint?: string;
   aspect?: string;
+  allowClear?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
 
@@ -91,18 +104,32 @@ export function ImageUploadField({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={value} alt={label} className="h-full w-full object-cover" />
-              <div className="absolute inset-0 flex items-end justify-end bg-gradient-to-t from-black/60 via-transparent to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange(null);
-                  }}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-text hover:bg-danger/80"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+              {allowClear ? (
+                <div className="absolute inset-0 flex items-end justify-end bg-gradient-to-t from-black/60 via-transparent to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChange(null);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-text hover:bg-danger/80"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                // allowClear=false — field ini WAJIB selalu terisi (lihat
+                // catatan di props di atas), jadi TIDAK ADA tombol X sama
+                // sekali. Satu-satunya affordance ganti foto: klik/drag foto
+                // baru ke kotak ini langsung (root dropzone selalu aktif),
+                // diberi hint visual jelas saat hover supaya tidak
+                // membingungkan spt sebelumnya.
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/50 group-hover:opacity-100">
+                  <span className="rounded-full bg-black/70 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-text">
+                    Klik utk ganti
+                  </span>
+                </div>
+              )}
             </motion.div>
           ) : (
             <motion.div

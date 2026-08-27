@@ -63,9 +63,10 @@ const ROLE_LABELS: Record<ImageRole, string> = {
 };
 
 // Kolase (kolase_gabungan/kolase_detail/kolase_warna) adalah gambar
-// KOMPOSIT statis — ada logo brand/label teks nempel di atasnya (kolase_
-// warna: nama warna per panel). Menganimasikannya lewat Kling akan bikin
-// logo/teks itu ikut terdistorsi gerakan kamera, jadi ketiga role ini
+// KOMPOSIT — ada logo brand/label teks nempel di atasnya via next/og
+// (kolase_warna: caption nama-nama warna di bawah foto hero AI-nya, lihat
+// lib/image-template/color-lineup.tsx). Menganimasikannya lewat Kling akan
+// bikin logo/teks itu ikut terdistorsi gerakan kamera, jadi ketiga role ini
 // SENGAJA dikecualikan dari daftar foto yang bisa dipilih utk "Video
 // Cerita Gabungan" (lihat lib/prompts/video-motion.ts utk catatan sisi
 // lain dari pengecualian yang sama).
@@ -101,11 +102,9 @@ export default function HistoryPage() {
   const [addSeriWarna, setAddSeriWarna] = useState("");
   const [addSeriImage, setAddSeriImage] = useState<string | null>(null);
   const [addingSeri, setAddingSeri] = useState(false);
-  // "Gabung Semua Warna" (Agustus 2026 — admin: "tambahin 1 lagi ya untuk
-  // serian warna, saya mau masukin jadi 1 foto aja... tanpa merubah detail
-  // sedikit pun") — susun foto ASLI tiap warna (bukan hasil AI) jadi 1
-  // lineup, lihat app/api/generation-sets/[id]/color-lineup/route.ts.
-  const [generatingLineup, setGeneratingLineup] = useState(false);
+  // REVISI BESAR (Agustus 2026) — fitur "Lineup Warna" pindah jadi halaman
+  // baru sendiri (/lineup-warna), bukan lagi tombol di sini. Lihat
+  // app/lineup-warna/page.tsx & lib/prompts/color-lineup-generate.ts.
   // "Video Cerita Gabungan (AI)" (Agustus 2026, REVISI v2) — admin minta
   // SEMUA foto post digabung jadi 1 video utuh (bukan pilih 1 foto), jadi
   // panel ini level SET (bukan per-foto lagi seperti versi lama). Progress
@@ -480,29 +479,6 @@ export default function HistoryPage() {
       toast.error(err instanceof Error ? err.message : "Gagal tambah warna seri");
     } finally {
       setAddingSeri(false);
-    }
-  }
-
-  // "Gabung Semua Warna" — bikin/perbarui 1 foto lineup semua warna (BUKAN
-  // panggilan AI, cuma susun foto ASLI yang sudah diupload, lihat
-  // app/api/generation-sets/[id]/color-lineup/route.ts). Idempotent di
-  // server — klik ulang setelah nambah warna baru cukup memperbarui baris
-  // yang sama, bukan numpuk baris kolase_warna baru.
-  async function handleGenerateColorLineup() {
-    if (!selected) return;
-    setGeneratingLineup(true);
-    try {
-      const res = await fetch(`/api/generation-sets/${selected.id}/color-lineup`, {
-        method: "POST",
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Gagal membuat lineup warna");
-      toast.success("Lineup warna berhasil dibuat");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Gagal membuat lineup warna");
-    } finally {
-      await refreshOne(selected.id);
-      setGeneratingLineup(false);
     }
   }
 
@@ -908,33 +884,6 @@ export default function HistoryPage() {
                           Tambah
                         </Button>
                       </div>
-                    </div>
-                  )}
-
-                  {/* "Gabung Semua Warna" — muncul begitu set ini punya
-                      minimal 1 warna seri. Lihat handleGenerateColorLineup
-                      & app/api/generation-sets/[id]/color-lineup/route.ts. */}
-                  {selected.ai_generations.some((g) => g.image_role === "seri") && (
-                    <div className="mt-3 rounded-lg border border-border bg-surface-2 p-3">
-                      <p className="mb-1 text-xs font-medium text-text">Gabung Semua Warna</p>
-                      <p className="mb-3 text-xs text-text-faint">
-                        Susun foto warna utama + semua warna seri jadi 1 gambar bersisian, pakai
-                        foto ASLI yang diupload apa adanya (bukan hasil AI) — dijamin tidak ada
-                        detail produk yang berubah. Klik ulang kapan saja setelah nambah warna
-                        baru utk memperbarui.
-                      </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        loading={generatingLineup}
-                        onClick={handleGenerateColorLineup}
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        {selected.ai_generations.some((g) => g.image_role === "kolase_warna")
-                          ? "Perbarui Lineup Warna"
-                          : "Buat Lineup Warna"}
-                      </Button>
                     </div>
                   )}
                 </CardBody>
