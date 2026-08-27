@@ -146,13 +146,26 @@ export interface VideoClipJob {
 // brand). BUKAN panggilan AI baru — cuma compositing lokal (next/og, lihat
 // lib/image-template/set-collage.tsx), makanya `cost` selalu 0 utk kedua
 // role ini.
+//
+// "kolase_warna" (BARU Agustus 2026 — admin: "tambahin 1 lagi ya untuk
+// serian warna, saya mau masukin jadi 1 foto aja... tanpa merubah detail
+// sedikit pun"): 1 foto yang menyandingkan SEMUA warna varian produk yang
+// sama dalam 1 gambar. SAMA SEKALI BUKAN panggilan AI (beda dari role "seri"
+// yang tetap generate lewat Nano Banana Pro) — cuma compositing foto ASLI
+// yang sudah diupload admin per warna (lihat lib/image-template/
+// color-lineup.tsx & app/api/generation-sets/[id]/color-lineup/route.ts),
+// menjamin 100% tidak ada perubahan detail produk krn tidak ada AI yang
+// menyentuh gambarnya. `cost` selalu 0, `pose_id`/`variant_warna`/
+// `variant_product_images` selalu null utk role ini (bukan milik 1 warna
+// spesifik, agregat semua warna dalam set).
 export type ImageRole =
   | "utama"
   | "detail"
   | "seri"
   | "angle"
   | "kolase_gabungan"
-  | "kolase_detail";
+  | "kolase_detail"
+  | "kolase_warna";
 export type GenerationStatus = "queued" | "processing" | "completed" | "failed";
 
 export interface Generation {

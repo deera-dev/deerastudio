@@ -39,6 +39,12 @@
 //   generate ulang 2 crop close-up dari utama (Kontext) lalu disusun ulang
 //   — 2 crop itu TIDAK disimpan sbg baris sendiri (konsisten dgn alur
 //   generate-set awal).
+// - role "kolase_warna" (BARU Agustus 2026, lihat types/database.ts &
+//   app/api/generation-sets/[id]/color-lineup/route.ts) -> SAMA SEKALI
+//   BUKAN panggilan AI (beda dari "seri" yang tetap generate lewat Nano
+//   Banana Pro) — susun ULANG dari foto ASLI warna utama (set.product_images)
+//   + tiap baris "seri" milik set ini yang SEDANG AKTIF, jadi 1 gambar
+//   "lineup" semua warna. cost selalu 0.
 //
 // REVISI (Agustus 2026 — admin regenerate D-024-HMS berkali-kali tapi hasil
 // masih belum sesuai, tanya "bisa ga kita kasih prompt lagi buat benerin
@@ -93,6 +99,7 @@ import {
 import { runDetailCrop } from "@/lib/prompts/stage2";
 import { composeBackground, type BackgroundMode } from "@/lib/prompts/background-composer";
 import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-template/set-collage";
+import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import type { BackgroundPresetRow, Generation } from "@/types/database";
 
@@ -154,6 +161,7 @@ export async function POST(
 
   const set = gen.ai_generation_sets as {
     id: string;
+    product_kode: string;
     model_id: string;
     pose_id: string;
     product_images: ProductImagesShape;
@@ -376,6 +384,57 @@ export async function POST(
           // 2 crop tersembunyi tetap pakai fal.ai (Kontext) — cost regenerate
           // ini mencerminkan biaya nyata, beda dgn kolase_gabungan yg murni 0.
           cost: COST_DERIVED * 2,
+        })
+        .eq("id", id);
+
+      return NextResponse.json({ status: "completed", imageUrl: url });
+    }
+
+    // role "kolase_warna" (BARU Agustus 2026 — lihat types/database.ts &
+    // app/api/generation-sets/[id]/color-lineup/route.ts utk latar
+    // belakang lengkap) — BUKAN panggilan AI sama sekali, cuma susun ULANG
+    // dari foto ASLI warna utama (set.product_images) + tiap baris "seri"
+    // milik set ini yang SEDANG AKTIF saat ini (mis. kalau admin baru
+    // nambah warna seri baru setelah lineup pertama dibuat, regenerate ini
+    // yang menyertakan warna baru itu). cost tetap 0.
+    if (gen.image_role === "kolase_warna") {
+      const mainUrl = set.product_images.fullBody ?? set.product_images.front;
+      if (!mainUrl) {
+        throw new Error("Set ini tidak punya foto warna utama tersimpan — tidak bisa regenerate lineup warna");
+      }
+
+      const { data: seriRows } = await supabase
+        .from("ai_generations")
+        .select("variant_warna, variant_product_images, created_at")
+        .eq("generation_set_id", set.id)
+        .eq("image_role", "seri")
+        .order("created_at", { ascending: true });
+
+      const entries = [
+        { url: mainUrl, label: set.product_warna || "Utama" },
+        ...((seriRows ?? []) as { variant_warna: string | null; variant_product_images: Record<string, string> | null }[])
+          .map((r) => {
+            const variantUrl = r.variant_product_images?.image;
+            return variantUrl ? { url: variantUrl, label: r.variant_warna || "Warna" } : null;
+          })
+          .filter((e): e is { url: string; label: string } => e !== null),
+      ];
+
+      if (entries.length < 2) {
+        throw new Error("Belum ada warna seri utk produk ini — tambah minimal 1 warna seri dulu");
+      }
+
+      const buffer = await renderColorLineupPng({ productKode: set.product_kode, entries });
+      const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
+
+      await supabase
+        .from("ai_generations")
+        .update({
+          vto_image_url: null,
+          output_image_url: url,
+          status: "completed",
+          generation_time_ms: null,
+          cost: 0,
         })
         .eq("id", id);
 

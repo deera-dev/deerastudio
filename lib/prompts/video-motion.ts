@@ -46,13 +46,14 @@ const FULL_BODY_MOTION =
 const DETAIL_CLOSEUP_MOTION =
   "Slow, smooth camera pan combined with a gentle zoom, moving across the fabric detail to reveal its texture, embroidery, buttons, or stitching up close. Soft studio light catches the material as the camera moves. Macro fashion editorial style, no distortion, no scene changes, no outfit changes.";
 
-// "kolase_gabungan"/"kolase_detail" (Agustus 2026, "4 foto tetap", lihat
-// app/api/generate-set/route.ts REVISI #7) TIDAK PERNAH benar-benar sampai
-// ke sini di alur normal — kolase adalah gambar KOMPOSIT statis (ada logo
-// brand & label teks "DETAIL" nempel di atasnya), menganimasikannya lewat
-// Kling akan bikin logo/teks itu ikut terdistorsi gerakan kamera, jadi
-// History sengaja MENGECUALIKAN kedua role ini dari daftar foto yang bisa
-// dipilih utk "Video Cerita Gabungan" (lihat filter di app/history/
+// "kolase_gabungan"/"kolase_detail"/"kolase_warna" (kolase_warna BARU
+// Agustus 2026, lihat types/database.ts) TIDAK PERNAH benar-benar sampai ke
+// sini di alur normal — ketiganya gambar KOMPOSIT statis (kolase_gabungan/
+// detail ada logo brand & label teks "DETAIL" nempel; kolase_warna ada
+// label nama warna nempel di tiap panel), menganimasikannya lewat Kling
+// akan bikin logo/teks itu ikut terdistorsi gerakan kamera, jadi History
+// sengaja MENGECUALIKAN ketiga role ini dari daftar foto yang bisa dipilih
+// utk "Video Cerita Gabungan" (lihat VIDEO_EXCLUDED_ROLES di app/history/
 // page.tsx). Entri di bawah HANYA supaya Record<ImageRole,...> ini
 // type-complete — kalau suatu saat filter itu terlewat, fallback ke
 // template badan-penuh/detail biasa drpd crash.
@@ -63,6 +64,7 @@ const ROLE_MOTION_TEMPLATES: Record<ImageRole, string> = {
   detail: DETAIL_CLOSEUP_MOTION,
   kolase_gabungan: FULL_BODY_MOTION,
   kolase_detail: DETAIL_CLOSEUP_MOTION,
+  kolase_warna: FULL_BODY_MOTION,
 };
 
 // styleNote opsional (tulisan admin, atau hasil suggestVideoMotion di
