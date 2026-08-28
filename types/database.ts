@@ -87,6 +87,11 @@ export interface GenerationSet {
     fullBody?: string;
   };
   product_warna: string | null;
+  // REVISI BESAR (Agustus 2026 — lihat app/lineup-warna/page.tsx): foto
+  // flat-lay ASLI per warna khusus fitur "Lineup Warna", dikelola langsung
+  // dari halaman itu, TIDAK PERNAH memicu generate AI per warna (beda dari
+  // "seri" di Generation — itu tetap generate FULL foto model per warna).
+  lineup_color_refs: { warna: string; image: string }[];
   status: GenerationSetStatus;
   total_cost: number | null;
   published_at: string | null;
@@ -147,23 +152,31 @@ export interface VideoClipJob {
 // lib/image-template/set-collage.tsx), makanya `cost` selalu 0 utk kedua
 // role ini.
 //
-// "kolase_warna" (BARU Agustus 2026, REVISI BESAR — admin awalnya minta
-// "tambahin 1 lagi ya untuk serian warna, saya mau masukin jadi 1 foto
-// aja... tanpa merubah detail sedikit pun", lalu setelah dikirimi referensi
-// foto "colorway lineup" editorial (garment digantung rapi di hanger rail /
-// fanned overlapping, styling studio premium) diminta "versi yang lebih
-// bagusnya"): 1 foto yang menyandingkan SEMUA warna varian produk yang sama
-// dalam 1 scene premium. PANGGILAN AI (Nano Banana Pro, via
-// runColorLineupGenerate — sama seperti role "seri") — foto ASLI yang sudah
-// diupload admin per warna dikirim sbg REFERENCE images, bukan ditempel
-// literal lagi seperti versi pertama (lihat lib/prompts/
-// color-lineup-generate.ts & lib/image-template/color-lineup.tsx &
-// app/api/generation-sets/[id]/color-lineup/route.ts). Fidelity produk (tidak
-// boleh berubah desain/warna) dijaga lewat prompt "blueprint/absolute source
-// of truth" yang eksplisit, BUKAN lagi lewat ketiadaan AI. `cost` mengikuti
-// COST_FULL_PASS (sama seperti utama/angle/seri), `pose_id`/`variant_warna`/
-// `variant_product_images` selalu null utk role ini (bukan milik 1 warna
-// spesifik, agregat semua warna dalam set).
+// "kolase_warna" (BARU Agustus 2026, 2x REVISI BESAR):
+// v1 — admin: "tambahin 1 lagi ya untuk serian warna, saya mau masukin
+//      jadi 1 foto aja... tanpa merubah detail sedikit pun" -> compositing
+//      murni next/og dari foto ASLI (BUKAN AI). Ditolak — hasilnya cuma
+//      grid foto flat-lay, bukan editorial spt referensi yang dikirim
+//      admin (garment digantung di hanger rail / fanned overlapping).
+// v2 — PIVOT ke AI (Nano Banana Pro, via runColorLineupGenerate): 1 foto
+//      yang menyandingkan SEMUA warna varian produk dalam 1 scene premium.
+//      Fidelity produk (tidak boleh berubah desain/warna) dijaga lewat
+//      prompt "blueprint/absolute source of truth" yang eksplisit.
+// v3 — REVISI BESAR sumber foto referensi (admin: "boros credit, harus
+//      generate per seri foto satu2... saya bisa hanya attach foto asli
+//      flat ray masing-masing warnanya"): DULU sumber warna tambahan
+//      adalah baris ai_generations role "seri" (mewajibkan generate model
+//      penuh per warna dulu). SEKARANG sumbernya ai_generation_sets.
+//      lineup_color_refs — foto flat-lay ASLI yang admin attach LANGSUNG
+//      di halaman Lineup Warna, TIDAK PERNAH memicu generate AI sebelum
+//      tombol "Generate Lineup Warna" diklik (lihat lib/prompts/
+//      color-lineup-generate.ts, lib/image-template/color-lineup.tsx,
+//      app/api/generation-sets/[id]/{color-lineup,lineup-color-refs}/
+//      route.ts). `cost` mengikuti COST_FULL_PASS (sama spt utama/angle/
+//      seri), `pose_id`/`variant_warna`/`variant_product_images` selalu
+//      null utk role ini (bukan milik 1 warna spesifik, agregat semua
+//      warna dalam set — daftar warnanya sendiri ada di
+//      ai_generation_sets.lineup_color_refs, bukan di baris Generation).
 export type ImageRole =
   | "utama"
   | "detail"
@@ -232,4 +245,24 @@ export interface ContentPost {
   // (AI)" (khusus content_type "reel"), lihat lib/fal/video.ts. null
   // berarti post ini belum/tidak punya video.
   video_url: string | null;
+}
+
+// "Generate Bebas" (Agustus 2026) — admin: "saya mau ada 1 halaman lagi,
+// baru, yaitu saya bisa generate foto ai apapun, tidak hanya untuk produk
+// deera, samalah seperti chatgpt ataupun gemini, saya bisa upload foto
+// reference dan atau memasukan prompt gambar yang saya mau". Halaman
+// bebas-produk sepenuhnya — lihat app/generate-bebas/page.tsx,
+// lib/prompts/freeform-generate.ts.
+export interface FreeformGeneration {
+  id: string;
+  prompt: string;
+  reference_image_urls: string[]; // kosong [] = text-to-image murni (lihat NANO_BANANA_TEXT_TO_IMAGE)
+  aspect_ratio: string;
+  output_image_url: string | null;
+  status: GenerationStatus;
+  generation_time_ms: number | null;
+  cost: number | null;
+  error_message: string | null;
+  created_by_email: string | null;
+  created_at: string;
 }

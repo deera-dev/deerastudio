@@ -13,10 +13,20 @@
 // dipakai literal sbg output lagi — beda dari versi pertama):
 // - Warna utama -> set.product_images.fullBody (kalau ada) atau .front.
 //   Label warnanya set.product_warna, atau "Utama" kalau kosong.
-// - Tiap warna seri -> baris ai_generations role "seri" milik set ini,
-//   field variant_product_images.image (foto ASLI full-body yang diupload
-//   admin utk warna itu — BUKAN output_image_url hasil generate AI role
-//   "seri"-nya, supaya tidak numpuk 2 lapis AI generation).
+// - Tiap warna tambahan -> set.lineup_color_refs (jsonb {warna,image}[]).
+//
+// REVISI BESAR (Agustus 2026 — admin: "disini kan baru tersedia kalau seri
+// warnanya sudah terfoto/generate, nah saya gamau itu karena akan boros
+// credit, harus generate per seri foto satu2... saya bisa hanya attach foto
+// asli flat ray masing-masing warnanya"): sumber warna tambahan DULU adalah
+// baris ai_generations role "seri" (field variant_product_images.image) —
+// yang keberadaannya MEWAJIBKAN admin generate 1 foto model penuh per warna
+// dulu lewat "Tambah Warna Seri" di History (Rp2.700/warna, murni utk
+// kebutuhan lain di luar lineup). Sekarang sumbernya
+// ai_generation_sets.lineup_color_refs — foto flat-lay ASLI yang admin
+// attach LANGSUNG di halaman Lineup Warna (app/api/generation-sets/[id]/
+// lineup-color-refs/route.ts), TIDAK PERNAH memicu generate AI apa pun
+// sebelum tombol "Generate Lineup Warna" ini sendiri diklik.
 //
 // Idempotent per set: kalau set ini SUDAH pernah generate lineup (ada baris
 // image_role="kolase_warna"), panggilan berikutnya nge-UPDATE baris yang
@@ -47,6 +57,7 @@ type SetShape = {
   product_kode: string;
   product_images: ProductImagesShape;
   product_warna: string | null;
+  lineup_color_refs: { warna: string; image: string }[];
 };
 
 export async function POST(
@@ -63,7 +74,7 @@ export async function POST(
 
   const { data: setRaw, error: setError } = await supabase
     .from("ai_generation_sets")
-    .select("id, product_kode, product_images, product_warna")
+    .select("id, product_kode, product_images, product_warna, lineup_color_refs")
     .eq("id", id)
     .single();
   if (setError || !setRaw) {
@@ -79,35 +90,23 @@ export async function POST(
     );
   }
 
-  const { data: seriRows } = await supabase
-    .from("ai_generations")
-    .select("variant_warna, variant_product_images, created_at")
-    .eq("generation_set_id", id)
-    .eq("image_role", "seri")
-    .order("created_at", { ascending: true });
-
   const references: ColorLineupReference[] = [
     { url: mainUrl, label: set.product_warna || "Utama" },
-    ...((seriRows ?? []) as { variant_warna: string | null; variant_product_images: Record<string, string> | null }[])
-      .map((r) => {
-        const url = r.variant_product_images?.image;
-        return url ? { url, label: r.variant_warna || "Warna" } : null;
-      })
-      .filter((e): e is ColorLineupReference => e !== null),
+    ...(set.lineup_color_refs ?? []).map((r) => ({ url: r.image, label: r.warna })),
   ];
 
   if (references.length < 2) {
     return NextResponse.json(
       {
         error:
-          "Belum ada warna seri utk produk ini — tambah minimal 1 warna seri dulu (tombol \"Tambah Warna Seri\") sebelum buat lineup warna",
+          "Belum ada warna tambahan utk produk ini — tambah minimal 1 warna dulu (tombol \"+ Tambah Warna\") sebelum buat lineup warna",
       },
       { status: 400 }
     );
   }
   if (references.length > 7) {
     return NextResponse.json(
-      { error: "Maksimal 7 warna (1 utama + 6 seri) per lineup — kurangi warna seri dulu" },
+      { error: "Maksimal 7 warna (1 utama + 6 tambahan) per lineup — kurangi warna dulu" },
       { status: 400 }
     );
   }

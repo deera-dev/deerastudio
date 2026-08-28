@@ -2,7 +2,7 @@
 // Halaman "Lineup Warna" — REVISI BESAR Agustus 2026, halaman baru sendiri
 // (bukan lagi tombol nempel di panel detail History — admin: "bikin fitur
 // baru kan saya bilang" setelah versi pertama dinilai bukan fitur baru
-// sungguhan). Fitur ini sendiri sudah 2x revisi besar sebelum sampai sini:
+// sungguhan). Fitur ini sendiri sudah 3x revisi besar sebelum sampai sini:
 //  v1 — admin: "tambahin 1 lagi ya untuk serian warna, saya mau masukin
 //       jadi 1 foto aja digantung dengan hanger tanpa merubah detail
 //       sedikit pun ... tambahin fitur ini di history ya" -> compositing
@@ -20,23 +20,36 @@
 //       tentu ga boleh berubah") dijaga lewat prompt "blueprint/absolute
 //       source of truth" + klausa COLOR ACCURACY eksplisit, BUKAN lagi
 //       lewat ketiadaan AI.
+//  v3 — admin: "disini kan baru tersedia kalau seri warnanya sudah
+//       terfoto/generate... saya gamau itu karena akan boros credit, harus
+//       generate per seri foto satu2... saya bisa hanya attach foto asli
+//       flat ray masing-masing warnanya". Sebelumnya, warna tambahan HARUS
+//       berupa baris ai_generations role "seri" (History -> Tambah Warna
+//       Seri), yang keberadaannya mewajibkan generate 1 foto model PENUH
+//       per warna dulu (Rp2.700/warna). Sekarang halaman ini SEPENUHNYA
+//       independen dari itu — warna tambahan dikelola sbg foto flat-lay
+//       ASLI langsung di sini (ai_generation_sets.lineup_color_refs, lihat
+//       app/api/generation-sets/[id]/lineup-color-refs/route.ts), TIDAK
+//       PERNAH memicu generate AI apa pun sebelum "Generate Lineup Warna"
+//       diklik (1x panggilan AI utk compose scene akhir). Produk yang bisa
+//       dipilih juga tidak lagi dibatasi hanya yang sudah punya warna seri
+//       — SEMUA set dgn foto utama bisa dipakai.
 //
-// Alur halaman ini: pilih SET (produk) yang sudah punya >=1 warna seri ->
-// lihat foto referensi tiap warna (bisa DIGANTI langsung di sini kalau ada
-// yang buram/salah — lihat handleReplacePhoto & app/api/generation-sets/
-// [id]/color-reference/route.ts) -> pilih gaya (hanger/fanned) + catatan
-// gaya opsional -> generate -> hasil satu foto "lineup" semua warna
-// tersimpan sbg baris ai_generations role "kolase_warna" di set itu
-// (idempotent, lihat app/api/generation-sets/[id]/color-lineup/route.ts).
-import { useEffect, useMemo, useState } from "react";
-import { Layers, Loader2, RefreshCw, Search, Shirt, Sparkles } from "lucide-react";
+// Alur halaman ini: pilih SET (produk) -> lihat/kelola foto referensi tiap
+// warna (ganti foto yang buram/salah, tambah warna baru via upload flat-lay
+// langsung, hapus warna) -> pilih gaya (hanger/fanned) + catatan gaya
+// opsional -> generate -> hasil satu foto "lineup" semua warna tersimpan
+// sbg baris ai_generations role "kolase_warna" di set itu (idempotent,
+// lihat app/api/generation-sets/[id]/color-lineup/route.ts).
+import { useEffect, useState } from "react";
+import { Layers, Loader2, Plus, RefreshCw, Search, Shirt, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Input, Label, Textarea, FieldHint } from "@/components/ui/Field";
+import { Input, Label, Select, Textarea, FieldHint } from "@/components/ui/Field";
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
 import { showImageLightbox } from "@/components/ui/ImageLightbox";
 import { cn } from "@/lib/utils";
@@ -46,15 +59,13 @@ import type { ColorLineupStyle } from "@/lib/prompts/color-lineup-generate";
 
 type SetWithGenerations = GenerationSet & { ai_generations: Generation[] };
 
-// REVISI (Agustus 2026 — admin lihat referensi warna 1 produk yang
-// framing-nya tidak konsisten & salah satu foto SALAH: "kok gini sih,
-// upload ulang aja, mana salah pula mending kalau bener fotonya"):
-// tiap entri sekarang bawa `kind`/`generationId` supaya bisa DITIMPA foto
-// barunya langsung dari sini lewat PATCH /api/generation-sets/[id]/
-// color-reference, tanpa perlu bongkar-pasang lewat History.
+// REVISI (Agustus 2026 v3 — lihat header di atas): warna tambahan sekarang
+// sumbernya set.lineup_color_refs (foto flat-lay ASLI, dikelola LANGSUNG di
+// sini), diidentifikasi via nama warnanya sendiri (bukan generationId lagi
+// — tidak ada baris ai_generations yang terlibat sama sekali).
 type ColorEntry =
   | { kind: "main"; url: string; label: string }
-  | { kind: "seri"; generationId: string; url: string; label: string };
+  | { kind: "extra"; warna: string; url: string; label: string };
 
 const STYLE_OPTIONS: { value: ColorLineupStyle; title: string; desc: string }[] = [
   {
@@ -69,18 +80,16 @@ const STYLE_OPTIONS: { value: ColorLineupStyle; title: string; desc: string }[] 
   },
 ];
 
-// Ambil daftar entri warna (utama + seri) dari 1 set — dipakai baik utk
+const MAX_TOTAL_COLORS = 7; // 1 utama + 6 tambahan, lihat batas di color-lineup/route.ts
+
+// Ambil daftar entri warna (utama + tambahan) dari 1 set — dipakai baik utk
 // preview referensi maupun dikirim ke API generate.
 function collectColorEntries(set: SetWithGenerations): ColorEntry[] {
   const mainUrl = set.product_images.fullBody ?? set.product_images.front;
-  const seriRows = set.ai_generations
-    .filter((g) => g.image_role === "seri")
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
   const entries: ColorEntry[] = [];
   if (mainUrl) entries.push({ kind: "main", url: mainUrl, label: set.product_warna || "Utama" });
-  for (const row of seriRows) {
-    const url = (row.variant_product_images as Record<string, string> | null)?.image;
-    if (url) entries.push({ kind: "seri", generationId: row.id, url, label: row.variant_warna || "Warna" });
+  for (const ref of set.lineup_color_refs ?? []) {
+    entries.push({ kind: "extra", warna: ref.warna, url: ref.image, label: ref.warna });
   }
   return entries;
 }
@@ -94,22 +103,25 @@ export default function LineupWarnaPage() {
   const [style, setStyle] = useState<ColorLineupStyle>("hanger");
   const [styleNote, setStyleNote] = useState("");
   const [generating, setGenerating] = useState(false);
+  // Form "+ Tambah Warna" — pilih dari products.warna produk ini (sama
+  // spt dropdown "Tambah Warna Seri" di History), supaya nama warna
+  // konsisten & tidak typo. Foto-nya WAJIB diupload manual (flat-lay ASLI).
+  const [productWarnaOptions, setProductWarnaOptions] = useState<string[]>([]);
+  const [newColorWarna, setNewColorWarna] = useState("");
+  const [newColorImage, setNewColorImage] = useState<string | null>(null);
+  const [savingColor, setSavingColor] = useState(false);
 
-  async function load() {
+  async function load(searchTerm: string) {
     setLoading(true);
     const supabase = createClient();
-    // Ambil set-set terbaru secukupnya lalu filter client-side utk yang
-    // punya >=1 warna seri — daftar "qualifying" ini realistis tidak akan
-    // sebesar riwayat penuh (History), jadi tidak butuh pagination
-    // server-side spt History.
-    const { data } = await supabase
+    let query = supabase
       .from("ai_generation_sets")
       .select("*, ai_generations(*)")
-      .order("created_at", { ascending: false })
-      .limit(300);
+      .order("created_at", { ascending: false });
+    if (searchTerm.trim()) query = query.ilike("product_kode", `%${searchTerm.trim()}%`);
+    const { data } = await query.limit(searchTerm.trim() ? 60 : 40);
     const rows = ((data as SetWithGenerations[]) ?? []).filter(
-      (s) => s.ai_generations.some((g) => g.image_role === "seri") &&
-        (s.product_images.fullBody ?? s.product_images.front)
+      (s) => s.product_images.fullBody ?? s.product_images.front
     );
     setSets(rows);
     setSelectedId((prev) => (rows.some((r) => r.id === prev) ? prev : (rows[0]?.id ?? null)));
@@ -117,32 +129,48 @@ export default function LineupWarnaPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
-
-  useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 250);
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const filteredSets = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return sets;
-    return sets.filter((s) => s.product_kode.toLowerCase().includes(term));
-  }, [sets, search]);
-
   useEffect(() => {
-    // Kalau set yang sedang dipilih tidak lagi ada di hasil search, pindah
-    // ke item pertama hasil search (kalau ada).
-    if (!filteredSets.some((s) => s.id === selectedId)) {
-      setSelectedId(filteredSets[0]?.id ?? null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredSets]);
+    load(search);
+  }, [search]);
 
   const selected = sets.find((s) => s.id === selectedId) ?? null;
   const colorEntries = selected ? collectColorEntries(selected) : [];
   const lineupGen = selected?.ai_generations.find((g) => g.image_role === "kolase_warna") ?? null;
+
+  // Pilihan warna yang tersisa utk "+ Tambah Warna" — warna produk ini yang
+  // belum jadi warna utama & belum ada di lineup_color_refs.
+  useEffect(() => {
+    setNewColorWarna("");
+    setNewColorImage(null);
+    if (!selected) {
+      setProductWarnaOptions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("products")
+        .select("warna")
+        .eq("kode", selected.product_kode)
+        .single();
+      if (!cancelled) setProductWarnaOptions((data?.warna as string[] | null) ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  const usedWarna = new Set([
+    selected?.product_warna,
+    ...(selected?.lineup_color_refs.map((r) => r.warna) ?? []),
+  ]);
+  const availableWarna = productWarnaOptions.filter((w) => !usedWarna.has(w));
 
   async function refreshOne(id: string) {
     const supabase = createClient();
@@ -157,23 +185,25 @@ export default function LineupWarnaPage() {
   // REVISI (Agustus 2026 — admin lihat referensi warna framing-nya
   // tidak konsisten & salah satu SALAH: "kok gini sih, upload ulang aja,
   // mana salah pula mending kalau bener fotonya"): ganti foto referensi
-  // LANGSUNG dari tile-nya, tanpa balik ke History. Tidak auto-regenerate
-  // lineup yang sudah ada — admin klik "Buat Ulang Lineup" manual stelah
-  // foto baru ini siap dipakai.
+  // LANGSUNG dari tile-nya. Tidak auto-regenerate lineup yang sudah ada —
+  // admin klik "Buat Ulang Lineup" manual setelah foto baru ini siap.
   async function handleReplacePhoto(entry: ColorEntry, newUrl: string | null) {
     if (!selected || !newUrl) return;
     try {
-      const res = await fetch(`/api/generation-sets/${selected.id}/color-reference`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          entry.kind === "main"
-            ? { kind: "main", imageUrl: newUrl }
-            : { kind: "seri", generationId: entry.generationId, imageUrl: newUrl }
-        ),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Gagal menyimpan foto baru");
+      if (entry.kind === "main") {
+        const res = await fetch(`/api/generation-sets/${selected.id}/color-reference`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: newUrl }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || "Gagal menyimpan foto baru");
+      } else {
+        const updatedEntries = (selected.lineup_color_refs ?? []).map((r) =>
+          r.warna === entry.warna ? { ...r, image: newUrl } : r
+        );
+        await saveColorRefs(updatedEntries);
+      }
       toast.success(
         lineupGen
           ? "Foto referensi diperbarui — klik \"Buat Ulang Lineup\" supaya hasilnya ikut update"
@@ -181,6 +211,47 @@ export default function LineupWarnaPage() {
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal menyimpan foto baru");
+    } finally {
+      await refreshOne(selected.id);
+    }
+  }
+
+  async function saveColorRefs(entries: { warna: string; image: string }[]) {
+    if (!selected) return;
+    const res = await fetch(`/api/generation-sets/${selected.id}/lineup-color-refs`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error || "Gagal menyimpan daftar warna");
+  }
+
+  // "+ Tambah Warna" — attach foto flat-lay ASLI langsung, TIDAK memicu
+  // generate AI apa pun (beda dari "Tambah Warna Seri" di History).
+  async function handleAddColor() {
+    if (!selected || !newColorWarna || !newColorImage) return;
+    setSavingColor(true);
+    try {
+      await saveColorRefs([...(selected.lineup_color_refs ?? []), { warna: newColorWarna, image: newColorImage }]);
+      toast.success(`Warna ${newColorWarna} ditambahkan`);
+      setNewColorWarna("");
+      setNewColorImage(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal tambah warna");
+    } finally {
+      await refreshOne(selected.id);
+      setSavingColor(false);
+    }
+  }
+
+  async function handleRemoveColor(warna: string) {
+    if (!selected) return;
+    try {
+      await saveColorRefs((selected.lineup_color_refs ?? []).filter((r) => r.warna !== warna));
+      toast.success(`Warna ${warna} dihapus dari lineup`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal hapus warna");
     } finally {
       await refreshOne(selected.id);
     }
@@ -211,11 +282,12 @@ export default function LineupWarnaPage() {
       <PageHeader
         eyebrow="Katalog Warna"
         title="Lineup Warna"
-        description="Gabungkan semua varian warna 1 produk jadi 1 foto premium (digantung atau berdiri fanned) lewat AI — warna & desain produk dijaga persis sama dengan foto aslinya, cuma presentasi scene-nya yang dipercantik."
+        description="Gabungkan semua varian warna 1 produk jadi 1 foto premium (digantung atau berdiri fanned) lewat AI — cukup attach foto flat-lay asli tiap warna, tanpa perlu generate foto model per warna dulu."
       />
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        {/* Kolom kiri — picker produk yang qualifying (punya >=1 warna seri) */}
+        {/* Kolom kiri — picker produk (SEMUA set dgn foto utama, tidak lagi
+            dibatasi harus sudah punya warna seri) */}
         <Card className="h-fit">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -238,16 +310,15 @@ export default function LineupWarnaPage() {
               <div className="flex items-center justify-center py-10 text-text-faint">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
-            ) : filteredSets.length === 0 ? (
+            ) : sets.length === 0 ? (
               <p className="py-8 text-center text-xs leading-relaxed text-text-faint">
-                Belum ada produk dengan warna seri. Tambah warna seri dulu lewat halaman{" "}
-                <span className="text-text-muted">History</span> sebelum bisa bikin lineup warna.
+                Tidak ada produk ditemukan.
               </p>
             ) : (
               <div className="max-h-[65vh] space-y-1.5 overflow-y-auto pr-1">
-                {filteredSets.map((s) => {
+                {sets.map((s) => {
                   const thumb = s.product_images.fullBody ?? s.product_images.front;
-                  const seriCount = s.ai_generations.filter((g) => g.image_role === "seri").length;
+                  const colorCount = 1 + (s.lineup_color_refs?.length ?? 0);
                   const active = s.id === selectedId;
                   return (
                     <button
@@ -270,7 +341,8 @@ export default function LineupWarnaPage() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-text">{s.product_kode}</p>
                         <p className="truncate text-xs text-text-faint">
-                          {s.product_warna || "Utama"} + {seriCount} warna seri
+                          {s.product_warna || "Utama"}
+                          {colorCount > 1 ? ` + ${colorCount - 1} warna` : ""}
                         </p>
                       </div>
                       {s.ai_generations.some((g) => g.image_role === "kolase_warna") && (
@@ -308,7 +380,7 @@ export default function LineupWarnaPage() {
                 </p>
                 <div className="flex flex-wrap gap-4">
                   {colorEntries.map((entry, i) => {
-                    const key = entry.kind === "main" ? "main" : entry.generationId;
+                    const key = entry.kind === "main" ? "main" : entry.warna;
                     return (
                       <div key={`${key}-${i}`} className="w-28">
                         <ImageUploadField
@@ -318,17 +390,77 @@ export default function LineupWarnaPage() {
                           onChange={(url) => handleReplacePhoto(entry, url)}
                           allowClear={false}
                         />
-                        <button
-                          type="button"
-                          onClick={() => showImageLightbox(entry.url, entry.label)}
-                          className="mt-1 text-[11px] text-text-faint underline decoration-dotted hover:text-gold-soft"
-                        >
-                          Lihat ukuran penuh
-                        </button>
+                        <div className="mt-1 flex items-center justify-between gap-1">
+                          <button
+                            type="button"
+                            onClick={() => showImageLightbox(entry.url, entry.label)}
+                            className="text-[11px] text-text-faint underline decoration-dotted hover:text-gold-soft"
+                          >
+                            Lihat penuh
+                          </button>
+                          {entry.kind === "extra" && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveColor(entry.warna)}
+                              className="text-text-faint hover:text-danger"
+                              title="Hapus warna ini dari lineup"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
+
+                {/* "+ Tambah Warna" — attach foto flat-lay ASLI langsung,
+                    TIDAK memicu generate AI (beda dari "Tambah Warna Seri"
+                    di History). */}
+                {availableWarna.length > 0 && colorEntries.length < MAX_TOTAL_COLORS && (
+                  <div className="mt-5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
+                    <p className="mb-2 text-xs font-medium text-text">+ Tambah Warna</p>
+                    <p className="mb-3 text-xs text-text-faint">
+                      Upload foto flat-lay asli warna ini — tidak perlu generate foto model dulu.
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="w-40">
+                        <Label htmlFor="new-color-warna">Warna</Label>
+                        <Select
+                          id="new-color-warna"
+                          value={newColorWarna}
+                          onChange={(e) => setNewColorWarna(e.target.value)}
+                        >
+                          <option value="">Pilih warna...</option>
+                          {availableWarna.map((w) => (
+                            <option key={w} value={w}>
+                              {w}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="w-28">
+                        <ImageUploadField
+                          label="Flat-lay"
+                          folder="products"
+                          value={newColorImage}
+                          onChange={setNewColorImage}
+                          required
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        loading={savingColor}
+                        disabled={!newColorWarna || !newColorImage}
+                        onClick={handleAddColor}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Tambah
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardBody>
             </Card>
 
@@ -384,7 +516,7 @@ export default function LineupWarnaPage() {
                   )}
                 </Button>
                 {colorEntries.length < 2 && (
-                  <FieldHint>Produk ini belum punya warna seri — tambah dulu lewat History.</FieldHint>
+                  <FieldHint>Tambah minimal 1 warna dulu di atas sebelum generate.</FieldHint>
                 )}
               </CardBody>
             </Card>

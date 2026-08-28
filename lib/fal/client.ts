@@ -17,6 +17,15 @@ export const FAL_MODELS = {
   // produk, karena bisa menerima banyak foto referensi + prompt bebas
   // (tidak seperti VTO klasik yang cuma nerima 2 foto tanpa instruksi teks).
   NANO_BANANA: "fal-ai/nano-banana-pro/edit",
+  // Text-to-image MURNI (Agustus 2026, fitur "Generate Bebas" — halaman AI
+  // playground bebas produk, spt ChatGPT/Gemini image gen): endpoint /edit
+  // di atas WAJIB minimal 1 image_urls (dipakai sbg referensi), jadi tidak
+  // bisa dipakai kalau admin generate TANPA upload foto referensi sama
+  // sekali (prompt teks doang). Endpoint tanpa "/edit" ini adalah varian
+  // text-to-image biasa dari model yang sama (Nano Banana Pro / Gemini 3
+  // Pro Image) — dipakai HANYA saat referenceImageUrls kosong (lihat
+  // lib/prompts/freeform-generate.ts).
+  NANO_BANANA_TEXT_TO_IMAGE: "fal-ai/nano-banana-pro",
   // Tahap crop/zoom foto "detail" & "seri" (turunan dari foto utama) — tetap
   // pakai Kontext, murah & cukup untuk operasi reframe murni.
   KONTEXT_PRO: "fal-ai/flux-pro/kontext",

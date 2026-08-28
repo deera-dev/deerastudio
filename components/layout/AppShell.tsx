@@ -21,7 +21,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Camera, History, LayoutDashboard, Megaphone, Palette, Shirt, UsersRound, Wand2 } from "lucide-react";
+import { Camera, History, LayoutDashboard, Megaphone, Palette, Shirt, Sparkles, UsersRound, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import KineticGrid from "@/components/ui/KineticGrid";
 import { LogoutButton } from "./LogoutButton";
@@ -38,6 +38,11 @@ const NAV = [
   // admin minta "bikin fitur baru kan saya bilang" (bukan tombol nempel di
   // panel detail History). Lihat app/lineup-warna/page.tsx.
   { href: "/lineup-warna", label: "Lineup Warna", icon: Shirt },
+  // "Generate Bebas" (Agustus 2026) — admin: "saya mau ada 1 halaman lagi,
+  // baru, yaitu saya bisa generate foto ai apapun, tidak hanya untuk
+  // produk deera, samalah seperti chatgpt ataupun gemini". Lihat
+  // app/generate-bebas/page.tsx.
+  { href: "/generate-bebas", label: "Generate Bebas", icon: Sparkles },
 ];
 
 // Rail ikon desktop — kapsul mengambang vertikal-tengah, cuma ikon (tanpa

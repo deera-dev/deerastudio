@@ -171,6 +171,7 @@ export async function POST(
     background_mode: BackgroundMode;
     background_preset_id: string | null;
     product_warna: string | null;
+    lineup_color_refs: { warna: string; image: string }[];
   };
 
   await supabase.from("ai_generations").update({ status: "processing" }).eq("id", id);
@@ -396,11 +397,11 @@ export async function POST(
     // role "kolase_warna" (REVISI BESAR Agustus 2026 — lihat types/database.ts
     // & app/api/generation-sets/[id]/color-lineup/route.ts utk latar
     // belakang lengkap pivot ke AI) — panggilan AI (Nano Banana Pro) yang
-    // mengambil foto ASLI warna utama (set.product_images) + tiap baris
-    // "seri" milik set ini yang SEDANG AKTIF saat ini sbg REFERENCE (mis.
-    // kalau admin baru nambah warna seri baru setelah lineup pertama dibuat,
-    // regenerate ini yang menyertakan warna baru itu), lalu AI menyusun ULANG
-    // 1 scene baru. `note` (opsional, dari dialog regenerate) diteruskan sbg
+    // mengambil foto ASLI warna utama (set.product_images) + set.lineup_
+    // color_refs (foto flat-lay ASLI per warna, dikelola langsung dari
+    // halaman Lineup Warna — lihat app/api/generation-sets/[id]/
+    // lineup-color-refs/route.ts) sbg REFERENCE, lalu AI menyusun ULANG 1
+    // scene baru. `note` (opsional, dari dialog regenerate) diteruskan sbg
     // styleNote tambahan ke AI — mis. "background lebih terang".
     if (gen.image_role === "kolase_warna") {
       const mainUrl = set.product_images.fullBody ?? set.product_images.front;
@@ -408,25 +409,13 @@ export async function POST(
         throw new Error("Set ini tidak punya foto warna utama tersimpan — tidak bisa regenerate lineup warna");
       }
 
-      const { data: seriRows } = await supabase
-        .from("ai_generations")
-        .select("variant_warna, variant_product_images, created_at")
-        .eq("generation_set_id", set.id)
-        .eq("image_role", "seri")
-        .order("created_at", { ascending: true });
-
       const references: ColorLineupReference[] = [
         { url: mainUrl, label: set.product_warna || "Utama" },
-        ...((seriRows ?? []) as { variant_warna: string | null; variant_product_images: Record<string, string> | null }[])
-          .map((r) => {
-            const variantUrl = r.variant_product_images?.image;
-            return variantUrl ? { url: variantUrl, label: r.variant_warna || "Warna" } : null;
-          })
-          .filter((e): e is ColorLineupReference => e !== null),
+        ...(set.lineup_color_refs ?? []).map((r) => ({ url: r.image, label: r.warna })),
       ];
 
       if (references.length < 2) {
-        throw new Error("Belum ada warna seri utk produk ini — tambah minimal 1 warna seri dulu");
+        throw new Error("Belum ada warna tambahan utk produk ini — tambah minimal 1 warna dulu");
       }
 
       const generated = await runColorLineupGenerate({
