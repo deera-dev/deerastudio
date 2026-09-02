@@ -34,7 +34,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { runColorLineupGenerate, type ColorLineupReference } from "@/lib/prompts/color-lineup-generate";
+import {
+  runColorLineupGenerate,
+  orderColorReferences,
+  type ColorLineupReference,
+} from "@/lib/prompts/color-lineup-generate";
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import type { ProductImagesShape } from "@/lib/prompts/nano-banana-generate";
@@ -45,7 +49,7 @@ import type { ProductImagesShape } from "@/lib/prompts/nano-banana-generate";
 export const maxDuration = 300;
 
 const requestSchema = z.object({
-  style: z.enum(["hanger", "fanned"]).optional().default("hanger"),
+  style: z.enum(["hanger", "fanned", "folded", "flatlay"]).optional().default("hanger"),
   styleNote: z.string().trim().max(300).optional(),
 });
 
@@ -58,6 +62,7 @@ type SetShape = {
   product_images: ProductImagesShape;
   product_warna: string | null;
   lineup_color_refs: { warna: string; image: string }[];
+  lineup_color_order: string[];
 };
 
 export async function POST(
@@ -74,7 +79,7 @@ export async function POST(
 
   const { data: setRaw, error: setError } = await supabase
     .from("ai_generation_sets")
-    .select("id, product_kode, product_images, product_warna, lineup_color_refs")
+    .select("id, product_kode, product_images, product_warna, lineup_color_refs, lineup_color_order")
     .eq("id", id)
     .single();
   if (setError || !setRaw) {
@@ -90,10 +95,13 @@ export async function POST(
     );
   }
 
-  const references: ColorLineupReference[] = [
+  // Urutan tampil warna (admin: "saya ingin bisa mengatur posisi
+  // warnanya") — lihat orderColorReferences() utk logic self-healing.
+  const references: ColorLineupReference[] = orderColorReferences(
     { url: mainUrl, label: set.product_warna || "Utama" },
-    ...(set.lineup_color_refs ?? []).map((r) => ({ url: r.image, label: r.warna })),
-  ];
+    (set.lineup_color_refs ?? []).map((r) => ({ warna: r.warna, ref: { url: r.image, label: r.warna } })),
+    set.lineup_color_order
+  );
 
   if (references.length < 2) {
     return NextResponse.json(

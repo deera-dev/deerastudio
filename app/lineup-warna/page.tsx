@@ -42,7 +42,7 @@
 // sbg baris ai_generations role "kolase_warna" di set itu (idempotent,
 // lihat app/api/generation-sets/[id]/color-lineup/route.ts).
 import { useEffect, useState } from "react";
-import { Layers, Loader2, Plus, RefreshCw, Search, Shirt, Sparkles, Trash2 } from "lucide-react";
+import { GripVertical, Layers, Loader2, Plus, RefreshCw, Search, Shirt, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -52,6 +52,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Input, Label, Select, Textarea, FieldHint } from "@/components/ui/Field";
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
 import { showImageLightbox } from "@/components/ui/ImageLightbox";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { Generation, GenerationSet } from "@/types/database";
@@ -67,6 +68,13 @@ type ColorEntry =
   | { kind: "main"; url: string; label: string }
   | { kind: "extra"; warna: string; url: string; label: string };
 
+// REVISI (Agustus 2026 — admin minta 2 gaya tambahan: "1nya adalah baju
+// terlipat mirip seperti image-3 [referensi tumpukan sweater terlipat gaya
+// etalase butik], tapi ga sama persis juga kaya gitu ya, 1nya lagi terserah
+// ide kamu aja apalagi yang bagus" -> ditambahkan "folded" (diadaptasi jadi
+// lebih premium/editorial, bukan reproduksi persis) & "flatlay" (top-down,
+// pilihan sendiri — beda arah visual dari 3 gaya lain). Lihat penjelasan
+// gaya lengkap di lib/prompts/color-lineup-generate.ts.
 const STYLE_OPTIONS: { value: ColorLineupStyle; title: string; desc: string }[] = [
   {
     value: "hanger",
@@ -78,20 +86,46 @@ const STYLE_OPTIONS: { value: ColorLineupStyle; title: string; desc: string }[] 
     title: "Berdiri Fanned",
     desc: "Semua warna berdiri saling tumpang tindih ringan membentuk kipas.",
   },
+  {
+    value: "folded",
+    title: "Terlipat Rapi",
+    desc: "Tiap warna dilipat jadi tumpukan rapi, disusun berjejer — gaya etalase butik.",
+  },
+  {
+    value: "flatlay",
+    title: "Flat Lay Atas",
+    desc: "Semua warna dibentangkan rata, difoto dari atas, berjejer dengan jarak sama.",
+  },
 ];
 
 const MAX_TOTAL_COLORS = 7; // 1 utama + 6 tambahan, lihat batas di color-lineup/route.ts
+const MAIN_KEY = "__main__"; // sama dgn sentinel di lib/prompts/color-lineup-generate.ts (orderColorReferences)
 
-// Ambil daftar entri warna (utama + tambahan) dari 1 set — dipakai baik utk
-// preview referensi maupun dikirim ke API generate.
+function keyOf(entry: ColorEntry) {
+  return entry.kind === "main" ? MAIN_KEY : entry.warna;
+}
+
+// Ambil daftar entri warna (utama + tambahan) dari 1 set, URUT sesuai
+// set.lineup_color_order (admin: "saya ingin bisa mengatur posisi
+// warnanya") — dipakai baik utk preview referensi maupun dikirim ke API
+// generate. Self-healing: key yang tidak ada di lineup_color_order (warna
+// baru ditambah, atau urutan belum pernah diset) di-append di akhir sesuai
+// urutan asli (utama dulu, lalu lineup_color_refs apa adanya) — SAMA
+// dengan logic orderColorReferences() di server, supaya preview di sini
+// selalu cocok dgn urutan yang benar-benar dipakai saat generate.
 function collectColorEntries(set: SetWithGenerations): ColorEntry[] {
   const mainUrl = set.product_images.fullBody ?? set.product_images.front;
-  const entries: ColorEntry[] = [];
-  if (mainUrl) entries.push({ kind: "main", url: mainUrl, label: set.product_warna || "Utama" });
+  const raw: ColorEntry[] = [];
+  if (mainUrl) raw.push({ kind: "main", url: mainUrl, label: set.product_warna || "Utama" });
   for (const ref of set.lineup_color_refs ?? []) {
-    entries.push({ kind: "extra", warna: ref.warna, url: ref.image, label: ref.warna });
+    raw.push({ kind: "extra", warna: ref.warna, url: ref.image, label: ref.warna });
   }
-  return entries;
+
+  const byKey = new Map(raw.map((e) => [keyOf(e), e]));
+  const order = set.lineup_color_order ?? [];
+  const orderedKeys = order.filter((k) => byKey.has(k));
+  const missingKeys = [...byKey.keys()].filter((k) => !orderedKeys.includes(k));
+  return [...orderedKeys, ...missingKeys].map((k) => byKey.get(k)!);
 }
 
 export default function LineupWarnaPage() {
@@ -245,8 +279,19 @@ export default function LineupWarnaPage() {
     }
   }
 
+  // REVISI (Agustus 2026 — admin ga sengaja klik trash & warnanya kehapus:
+  // "tombol icon hapus harusnya ada konfirmasi dulu, saya ga sengaja jadi
+  // hapus warna"): wajib konfirmasi dulu sebelum benar-benar menghapus.
   async function handleRemoveColor(warna: string) {
     if (!selected) return;
+    const ok = await confirmDialog({
+      title: `Hapus warna ${warna} dari lineup?`,
+      description:
+        "Foto referensi warna ini akan dilepas dari lineup — kalau berubah pikiran, tambahkan lagi lewat \"+ Tambah Warna\".",
+      confirmLabel: "Hapus",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await saveColorRefs((selected.lineup_color_refs ?? []).filter((r) => r.warna !== warna));
       toast.success(`Warna ${warna} dihapus dari lineup`);
@@ -255,6 +300,49 @@ export default function LineupWarnaPage() {
     } finally {
       await refreshOne(selected.id);
     }
+  }
+
+  // Admin: "saya ingin bisa mengatur posisi warnanya" -> "bisa ga drag and
+  // drop aja dibanding pakai arrow?" — drag native HTML5 (draggable + drag
+  // events), mulai dari handle kecil (GripVertical) di tiap tile, drop di
+  // tile lain utk pindah ke posisi itu. Persist ke lineup_color_order sama
+  // seperti sebelumnya, cuma cara memicunya yang berubah.
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
+  async function persistColorOrder(newOrder: string[]) {
+    if (!selected) return;
+    try {
+      const res = await fetch(`/api/generation-sets/${selected.id}/lineup-color-order`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: newOrder }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Gagal menyimpan urutan warna");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menyimpan urutan warna");
+    } finally {
+      await refreshOne(selected.id);
+    }
+  }
+
+  function handleDropOnColor(targetEntry: ColorEntry) {
+    const targetKey = keyOf(targetEntry);
+    setDragOverKey(null);
+    const fromKey = draggedKey;
+    setDraggedKey(null);
+    if (!fromKey || fromKey === targetKey) return;
+
+    const currentOrder = colorEntries.map(keyOf);
+    const fromIdx = currentOrder.indexOf(fromKey);
+    const toIdx = currentOrder.indexOf(targetKey);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const newOrder = [...currentOrder];
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, fromKey);
+    void persistColorOrder(newOrder);
   }
 
   async function handleGenerate() {
@@ -374,15 +462,51 @@ export default function LineupWarnaPage() {
               </CardHeader>
               <CardBody>
                 <p className="mb-3 text-xs text-text-faint">
-                  {colorEntries.length} warna akan dikirim sbg referensi ke AI — desain & warna tiap
-                  produk WAJIB tetap persis sama dengan foto ini, AI cuma menyusun ulang presentasinya.
-                  Foto buram/salah? Tarik foto baru langsung ke kotaknya utk mengganti.
+                  {colorEntries.length} warna akan dikirim sbg referensi ke AI, URUT kiri ke kanan
+                  sesuai posisi di bawah ini — geser pakai panah utk atur urutannya. Desain & warna
+                  tiap produk WAJIB tetap persis sama dengan foto ini, AI cuma menyusun ulang
+                  presentasinya. Foto buram/salah? Tarik foto baru langsung ke kotaknya utk mengganti.
                 </p>
                 <div className="flex flex-wrap gap-4">
                   {colorEntries.map((entry, i) => {
-                    const key = entry.kind === "main" ? "main" : entry.warna;
+                    const key = keyOf(entry);
                     return (
-                      <div key={`${key}-${i}`} className="w-28">
+                      <div
+                        key={`${key}-${i}`}
+                        onDragOver={(e) => {
+                          if (!draggedKey || draggedKey === key) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          setDragOverKey(key);
+                        }}
+                        onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleDropOnColor(entry);
+                        }}
+                        className={cn(
+                          "w-28 rounded-lg transition-shadow",
+                          dragOverKey === key && draggedKey && draggedKey !== key && "ring-2 ring-gold/60"
+                        )}
+                      >
+                        <div
+                          draggable
+                          onDragStart={(e) => {
+                            setDraggedKey(key);
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onDragEnd={() => {
+                            setDraggedKey(null);
+                            setDragOverKey(null);
+                          }}
+                          title="Tarik utk atur urutan"
+                          className="mb-1 flex cursor-grab items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] py-1 text-text-faint active:cursor-grabbing"
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wide">
+                            {i + 1}
+                          </span>
+                        </div>
                         <ImageUploadField
                           label={entry.label}
                           folder="products"

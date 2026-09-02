@@ -98,7 +98,11 @@ import {
   collectGarmentReferences,
   type ProductImagesShape,
 } from "@/lib/prompts/nano-banana-generate";
-import { runColorLineupGenerate, type ColorLineupReference } from "@/lib/prompts/color-lineup-generate";
+import {
+  runColorLineupGenerate,
+  orderColorReferences,
+  type ColorLineupReference,
+} from "@/lib/prompts/color-lineup-generate";
 import { runDetailCrop } from "@/lib/prompts/stage2";
 import { composeBackground, type BackgroundMode } from "@/lib/prompts/background-composer";
 import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-template/set-collage";
@@ -172,6 +176,7 @@ export async function POST(
     background_preset_id: string | null;
     product_warna: string | null;
     lineup_color_refs: { warna: string; image: string }[];
+    lineup_color_order: string[];
   };
 
   await supabase.from("ai_generations").update({ status: "processing" }).eq("id", id);
@@ -409,10 +414,11 @@ export async function POST(
         throw new Error("Set ini tidak punya foto warna utama tersimpan — tidak bisa regenerate lineup warna");
       }
 
-      const references: ColorLineupReference[] = [
+      const references: ColorLineupReference[] = orderColorReferences(
         { url: mainUrl, label: set.product_warna || "Utama" },
-        ...(set.lineup_color_refs ?? []).map((r) => ({ url: r.image, label: r.warna })),
-      ];
+        (set.lineup_color_refs ?? []).map((r) => ({ warna: r.warna, ref: { url: r.image, label: r.warna } })),
+        set.lineup_color_order
+      );
 
       if (references.length < 2) {
         throw new Error("Belum ada warna tambahan utk produk ini — tambah minimal 1 warna dulu");

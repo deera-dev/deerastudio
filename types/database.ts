@@ -92,6 +92,11 @@ export interface GenerationSet {
   // dari halaman itu, TIDAK PERNAH memicu generate AI per warna (beda dari
   // "seri" di Generation — itu tetap generate FULL foto model per warna).
   lineup_color_refs: { warna: string; image: string }[];
+  // Urutan tampil warna (kiri->kanan) di scene Lineup Warna — admin: "saya
+  // ingin bisa mengatur posisi warnanya". Array of "__main__" | warna;
+  // self-healing kalau tidak lengkap (lihat orderColorReferences() di
+  // lib/prompts/color-lineup-generate.ts).
+  lineup_color_order: string[];
   status: GenerationSetStatus;
   total_cost: number | null;
   published_at: string | null;

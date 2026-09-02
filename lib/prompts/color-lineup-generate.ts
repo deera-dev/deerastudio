@@ -32,7 +32,15 @@ export interface ColorLineupReference {
   label: string; // nama warna, mis. "MERAH", dipakai di PRODUCT REFERENCE MAP prompt (bukan dirender literal di gambar)
 }
 
-export type ColorLineupStyle = "hanger" | "fanned";
+// REVISI (Agustus 2026 — admin minta 2 gaya tambahan: 1) "baju terlipat
+// mirip seperti image-3, tapi ga sama persis juga kaya gitu ya" (referensi:
+// tumpukan sweater terlipat rapi berjejer, gaya etalase butik/toko retail —
+// diadaptasi jadi versi lebih premium/editorial, BUKAN reproduksi persis
+// foto itu), dan 2) "1nya lagi terserah ide kamu aja apalagi yang bagus" —
+// dipilih "flatlay" (top-down flat-lay, gaya e-commerce premium yang umum
+// & mudah dicapai AI, beda secara visual dari 3 gaya lain: hanger=vertikal
+// digantung, fanned=berdiri tumpang tindih, folded=ditumpuk terlipat).
+export type ColorLineupStyle = "hanger" | "fanned" | "folded" | "flatlay";
 
 export interface ColorLineupGenerateInput {
   references: ColorLineupReference[]; // 2-7 foto, urutan = urutan tampil di scene (kiri ke kanan)
@@ -56,10 +64,22 @@ function buildPrompt(input: ColorLineupGenerateInput): string {
     .map((r, i) => `COLOR REFERENCE ${i + 1} = "${r.label}"`)
     .join("\n");
 
-  const styleClause =
-    style === "hanger"
-      ? `Arrange all ${count} garments hanging neatly side by side on a single horizontal rail, evenly spaced, each on a matching wooden or matte black hanger. Every garment must be fully visible from a consistent front-facing angle (collar/neckline down to hem), hanging naturally with realistic fabric weight and drape — no garment overlapping or obscuring another.`
-      : `Arrange all ${count} garments standing upright in a gentle overlapping/cascading fan formation from left to right (each slightly behind and offset from the previous one, like a fanned deck), so every garment's front is still fully visible — collar, buttons, sleeve, and hem — even where they overlap. Realistic soft fabric folds and natural standing silhouette for each, as if each were worn by an invisible mannequin.`;
+  const STYLE_CLAUSES: Record<ColorLineupStyle, string> = {
+    hanger: `Arrange all ${count} garments hanging neatly side by side on a single horizontal rail, evenly spaced, each on a matching wooden or matte black hanger. Every garment must be fully visible from a consistent front-facing angle (collar/neckline down to hem), hanging naturally with realistic fabric weight and drape — no garment overlapping or obscuring another.`,
+    fanned: `Arrange all ${count} garments standing upright in a gentle overlapping/cascading fan formation from left to right (each slightly behind and offset from the previous one, like a fanned deck), so every garment's front is still fully visible — collar, buttons, sleeve, and hem — even where they overlap. Realistic soft fabric folds and natural standing silhouette for each, as if each were worn by an invisible mannequin.`,
+    // "Terlipat Rapi" — diadaptasi dari referensi tumpukan sweater terlipat
+    // gaya etalase butik yang dikirim admin, TAPI dinaikkan jadi lebih
+    // premium/editorial (bukan reproduksi persis): tiap garment dilipat
+    // jadi 1 tumpukan rapi, disusun berjejer, difoto dari sudut yang
+    // memperlihatkan permukaan atas + sisi lipatan supaya motif/tekstur
+    // tetap terlihat jelas per warna.
+    folded: `Fold each of the ${count} garments neatly into a compact rectangular stack (as if freshly folded for a boutique display) and arrange all ${count} stacks in a single neat row, evenly spaced with a small gap between each. Photograph from a gentle top-down/three-quarter angle so the top surface AND the folded front edge of every stack are both clearly visible — this must legibly show each garment's fabric print, texture, and color across its folded surface, not just a flat colored rectangle. Slight natural variation in fold height between stacks is fine for an effortless, hand-styled look, but keep every stack tidy and rectangular, not messy or crumpled.`,
+    // "Flat Lay Atas" — top-down flat-lay premium, gaya e-commerce umum,
+    // sengaja dipilih beda arah dari 3 gaya lain (semua garment terbentang
+    // rata, bukan digantung/berdiri/dilipat).
+    flatlay: `Lay each of the ${count} garments fully flat and fully extended (unfolded, not hanging, not standing) on a clean flat surface, arranged in a single neat horizontal row with even spacing between each garment and no overlap. Shoot from directly overhead (true top-down flat-lay angle) so each garment's complete silhouette — collar, both sleeves, and full hem — is visible in one unbroken outline, with soft natural fabric creases only, no styling folds.`,
+  };
+  const styleClause = STYLE_CLAUSES[style];
 
   return [
     "You are an expert in premium fashion e-commerce and catalog product photography, specifically 'colorway lineup' shots that present the SAME garment design in multiple color options within a single elegant image, with no model present.",
@@ -90,6 +110,28 @@ function buildPrompt(input: ColorLineupGenerateInput): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+// Urutan tampil warna kiri-ke-kanan (Agustus 2026 — admin: "saya ingin
+// bisa mengatur posisi warnanya, apakah bisa?"). Dipakai di 2 tempat yang
+// perlu membangun `references[]` (app/api/generation-sets/[id]/
+// color-lineup/route.ts & app/api/generations/[id]/regenerate/route.ts
+// cabang kolase_warna) supaya logic-nya konsisten & tidak duplikat.
+// Self-healing: key yang tidak ada di `order` (warna baru ditambah setelah
+// urutan diset, atau order belum pernah diset) di-append di AKHIR sesuai
+// urutan asli argumen (main dulu, lalu lineup_color_refs apa adanya).
+export function orderColorReferences(
+  mainRef: ColorLineupReference,
+  extraRefs: { warna: string; ref: ColorLineupReference }[],
+  order: string[] | null | undefined
+): ColorLineupReference[] {
+  const MAIN_KEY = "__main__";
+  const known = new Map<string, ColorLineupReference>([[MAIN_KEY, mainRef]]);
+  for (const e of extraRefs) known.set(e.warna, e.ref);
+
+  const orderedKeys = (order ?? []).filter((k) => known.has(k));
+  const missingKeys = [...known.keys()].filter((k) => !orderedKeys.includes(k));
+  return [...orderedKeys, ...missingKeys].map((k) => known.get(k)!);
 }
 
 export async function runColorLineupGenerate(
