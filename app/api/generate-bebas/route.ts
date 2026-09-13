@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { runFreeformGenerate } from "@/lib/prompts/freeform-generate";
+import { zodErrorMessage, errorMessage } from "@/lib/api-error";
 
 // fal.subscribe sinkron — jatah waktu longgar, konsisten dgn route lain yg
 // panggil Nano Banana Pro (lihat catatan BUG FIX maxDuration di
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = requestSchema.safeParse(await req.json());
   if (!body.success) {
-    return NextResponse.json({ error: body.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: zodErrorMessage(body.error) }, { status: 400 });
   }
 
   const supabase = await createClient();
@@ -86,10 +87,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(updated ?? row);
   } catch (err) {
+    const message = errorMessage(err, "Generate gagal");
     await supabase
       .from("freeform_generations")
-      .update({ status: "failed", error_message: (err as Error).message })
+      .update({ status: "failed", error_message: message })
       .eq("id", row.id);
-    return NextResponse.json({ error: (err as Error).message || "Generate gagal" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

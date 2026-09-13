@@ -42,6 +42,7 @@ import {
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import type { ProductImagesShape } from "@/lib/prompts/nano-banana-generate";
+import { errorMessage } from "@/lib/api-error";
 
 // Panggilan AI sinkron (fal.subscribe) — jatah waktu longgar, konsisten dgn
 // route lain yg panggil Nano Banana Pro (lihat catatan BUG FIX maxDuration
@@ -180,7 +181,7 @@ export async function POST(
     return NextResponse.json({ generationId: created.id, imageUrl: url });
   } catch (err) {
     return NextResponse.json(
-      { error: (err as Error).message || "Gagal membuat lineup warna" },
+      { error: errorMessage(err, "Gagal membuat lineup warna") },
       { status: 500 }
     );
   }

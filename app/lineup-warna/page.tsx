@@ -42,7 +42,7 @@
 // sbg baris ai_generations role "kolase_warna" di set itu (idempotent,
 // lihat app/api/generation-sets/[id]/color-lineup/route.ts).
 import { useEffect, useState } from "react";
-import { GripVertical, Layers, Loader2, Plus, RefreshCw, Search, Shirt, Sparkles, Trash2 } from "lucide-react";
+import { GripVertical, Info, Layers, Loader2, Plus, RefreshCw, Search, Shirt, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -656,20 +656,28 @@ export default function LineupWarnaPage() {
                     <p className="text-xs">AI sedang menyusun scene — biasanya 30-60 detik...</p>
                   </div>
                 ) : lineupGen?.output_image_url ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      showImageLightbox(lineupGen.output_image_url as string, "Lineup Warna")
-                    }
-                    className="relative mx-auto block w-full max-w-md overflow-hidden rounded-xl border border-white/[0.08]"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={lineupGen.output_image_url}
-                      alt="Lineup warna"
-                      className="w-full object-cover"
-                    />
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        showImageLightbox(lineupGen.output_image_url as string, "Lineup Warna")
+                      }
+                      className="relative mx-auto block w-full max-w-md overflow-hidden rounded-xl border border-white/[0.08]"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={lineupGen.output_image_url}
+                        alt="Lineup warna"
+                        className="w-full object-cover"
+                      />
+                    </button>
+                    <div className="mx-auto flex max-w-md items-start gap-1.5 text-xs text-text-faint">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <p>
+                        Disclaimer: Warna pada gambar ini bisa terlihat sedikit berbeda dari warna asli produk
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <p className="py-16 text-center text-sm text-text-faint">
                     Belum ada hasil — klik &quot;Generate Lineup Warna&quot; di atas.

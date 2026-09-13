@@ -28,6 +28,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type { ProductImagesShape } from "@/lib/prompts/nano-banana-generate";
+import { zodErrorMessage } from "@/lib/api-error";
 
 const requestSchema = z.object({ imageUrl: z.string().url() });
 
@@ -38,7 +39,7 @@ export async function PATCH(
   const { id } = await params;
   const body = requestSchema.safeParse(await req.json());
   if (!body.success) {
-    return NextResponse.json({ error: body.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: zodErrorMessage(body.error) }, { status: 400 });
   }
 
   const supabase = await createClient();
