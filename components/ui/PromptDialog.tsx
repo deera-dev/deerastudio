@@ -121,7 +121,7 @@ export function PromptDialogHost() {
             leaveFrom="opacity-100 scale-100"
             leaveTo="opacity-0 scale-95"
           >
-            <DialogPanel className="w-full max-w-md rounded-xl border border-border-strong bg-surface p-6 shadow-2xl">
+            <DialogPanel className="flex max-h-[85vh] w-full max-w-md flex-col overflow-y-auto rounded-xl border border-border-strong bg-surface p-6 shadow-2xl">
               <div className="mb-3 flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold/10 text-gold">
                   <Wand2 className="h-5 w-5" />
@@ -176,11 +176,11 @@ export function PromptDialogHost() {
                   <span>
                     <span className="flex items-center gap-1.5 text-sm font-medium text-text">
                       <Lock className="h-3.5 w-3.5 text-gold" />
-                      {state.lockGarmentLabel ?? "Kunci Produk — jangan generate ulang dari foto asli"}
+                      {state.lockGarmentLabel ?? "Kunci Produk"}
                     </span>
                     <span className="mt-0.5 block text-xs text-text-faint">
                       {state.lockGarmentHint ??
-                        "Pakai kalau produk di hasil sebelumnya SUDAH benar dan cuma pose/background/ketajaman yang mau diperbaiki. AI mengedit foto sebelumnya, bukan menggambar ulang produk. Jangan centang kalau masalahnya soal motif/detail produk itu sendiri."}
+                        "Pakai kalau produk sudah benar, cuma pose/background yang diperbaiki. Jangan centang kalau motif/detail produk ikut bermasalah."}
                     </span>
                   </span>
                 </label>

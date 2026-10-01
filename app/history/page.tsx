@@ -302,12 +302,12 @@ export default function HistoryPage() {
       const result = await promptDialog({
         title: `Generate Ulang — ${ROLE_LABELS[gen!.image_role] ?? gen!.image_role}`,
         description:
-          "Kalau hasil sebelumnya ada yang kurang pas, tulis di sini apa yang mau diperbaiki (Inggris lebih akurat) — AI diprioritaskan memperbaiki itu, bukan cuma coba ulang dgn seed acak, dan hasil sebelumnya otomatis dijadikan acuan supaya AI tahu persis apa yg mau dikoreksi. Kosongkan aja kalau cuma mau coba ulang biasa.",
+          "Tulis apa yang mau diperbaiki (Inggris lebih akurat) — hasil sebelumnya otomatis jadi acuan. Kosongkan kalau cuma mau coba ulang biasa.",
         placeholder: "mis. remove the bookshelf in the background, make the pose more relaxed...",
         confirmLabel: "Generate Ulang",
         allowImage: true,
         imageLabel: "Foto Referensi Tambahan (opsional, sampai 3)",
-        imageHint: "Contoh foto yang menunjukkan maksud perbaikan (pose/background/detail) — AI pakai ini sbg acuan visual tambahan, bukan pengganti foto produk/model.",
+        imageHint: "Contoh foto yang menunjukkan maksud perbaikan — bukan pengganti foto produk/model.",
         allowLockGarment: true,
       });
       if (result === null) return; // dibatalkan dari dialog
