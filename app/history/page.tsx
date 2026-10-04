@@ -643,8 +643,22 @@ export default function HistoryPage() {
                             />
                           </button>
                         ) : (
-                          <div className="flex aspect-[3/4] w-full items-center justify-center text-xs text-text-faint">
-                            {gen.status === "failed" ? "Gagal" : "..."}
+                          <div
+                            className={cn(
+                              "flex aspect-[3/4] w-full flex-col items-center justify-center gap-1.5 overflow-y-auto p-3 text-center text-xs",
+                              gen.status === "failed" ? "text-danger" : "text-text-faint"
+                            )}
+                          >
+                            {gen.status === "failed" ? (
+                              <>
+                                <span className="font-medium">Gagal</span>
+                                <span className="break-words text-[11px] leading-snug text-text-muted">
+                                  {gen.error_message || "Tidak ada detail error dari server."}
+                                </span>
+                              </>
+                            ) : (
+                              "..."
+                            )}
                           </div>
                         )}
                         <div className="flex items-center justify-between p-2">

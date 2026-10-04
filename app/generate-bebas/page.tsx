@@ -186,7 +186,11 @@ export default function GenerateBebasPage() {
                         item.output_image_url && showImageLightbox(item.output_image_url, item.prompt)
                       }
                       className="group relative aspect-square overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.02]"
-                      title={item.prompt}
+                      title={
+                        item.status === "failed" && item.error_message
+                          ? `Gagal: ${item.error_message}`
+                          : item.prompt
+                      }
                     >
                       {item.output_image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -196,8 +200,13 @@ export default function GenerateBebasPage() {
                           className="h-full w-full object-cover transition-transform group-hover:scale-105"
                         />
                       ) : item.status === "failed" ? (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] text-danger">
-                          Gagal
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden p-1.5 text-center text-danger">
+                          <span className="text-[10px] font-medium">Gagal</span>
+                          {item.error_message && (
+                            <span className="line-clamp-4 break-words text-[9px] leading-tight text-text-muted">
+                              {item.error_message}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">

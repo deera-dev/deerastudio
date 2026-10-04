@@ -399,6 +399,28 @@ export async function runNanoBananaGenerate(
   const startedAt = Date.now();
   const seed = input.seed ?? Math.floor(Math.random() * 1_000_000_000);
 
+  // BUG FIX (Oktober 2026 — fal.ai: "At most 14 image URLs are allowed",
+  // generate gagal 0.07 dtk tanpa sempat jalan): total gambar = pose + foto
+  // identitas + SEMUA foto garmen (utk seri bisa banyak: depan/belakang/
+  // detail/dst) + hasil sebelumnya + referensi koreksi (maks 3) bisa
+  // melewati batas 14 milik nano-banana-pro/edit. Potong di sini SEBELUM
+  // prompt dibangun (peta referensi di prompt harus cocok dgn gambar yg
+  // benar-benar dikirim). Prioritas dipertahankan: pose, hasil sebelumnya,
+  // referensi koreksi, foto garmen (urutan awal = paling penting), baru
+  // foto identitas tambahan sbg yg pertama dikorbankan (min. 1 dijaga).
+  const MAX_IMAGES = 14;
+  const fixedCount =
+    1 + (input.previousResultUrl ? 1 : 0) + (input.correctionReferenceUrls?.length ?? 0);
+  const identityAll = input.identityReferenceUrls ?? [];
+  let garmentBudget = Math.max(1, MAX_IMAGES - fixedCount - Math.min(identityAll.length, 1));
+  garmentBudget = Math.min(garmentBudget, input.garmentReferences.length);
+  const identityBudget = Math.max(0, MAX_IMAGES - fixedCount - garmentBudget);
+  input = {
+    ...input,
+    garmentReferences: input.garmentReferences.slice(0, garmentBudget),
+    identityReferenceUrls: identityAll.slice(0, identityBudget),
+  };
+
   const imageUrls = [
     input.poseImageUrl,
     ...(input.identityReferenceUrls ?? []),
