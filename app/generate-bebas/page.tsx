@@ -195,7 +195,9 @@ export default function GenerateBebasPage() {
                       {item.output_image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={item.output_image_url}
+                          src={item.output_thumb_url ?? item.output_image_url}
+                          loading="lazy"
+                          decoding="async"
                           alt={item.prompt}
                           className="h-full w-full object-cover transition-transform group-hover:scale-105"
                         />

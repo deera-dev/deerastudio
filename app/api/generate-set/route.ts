@@ -185,7 +185,8 @@ const productImagesSchema = z.object({
   detailNeck: z.string().url().optional(),
   detailSleeve: z.string().url().optional(),
   detailHand: z.string().url().optional(), // close-up pergelangan/manset tangan — BEDA dari detailSleeve
-  detailChest: z.string().url().optional(),
+  detailBack: z.string().url().optional(), // detail punggung (gantikan detailChest di input baru)
+  detailChest: z.string().url().optional(), // legacy — tidak lagi dikirim dari UI
   detailHem: z.string().url().optional(),
   fullBody: z.string().url().optional(),
 });
@@ -395,6 +396,7 @@ export async function POST(req: NextRequest) {
         .update({
           vto_image_url: null,
           output_image_url: result.imageUrl,
+          output_thumb_url: result.thumbUrl,
           has_stage2: true,
           status: "completed",
           generation_time_ms: result.generationTimeMs,
@@ -436,7 +438,11 @@ export async function POST(req: NextRequest) {
     "angle",
     backPose.id,
     backPose.reference_image_url,
-    prioritizeReference(primaryGarmentReferences, input.productImages.back)
+    // detailBack dulu, baru back -> hasil akhir: back, detailBack, sisanya.
+    prioritizeReference(
+      prioritizeReference(primaryGarmentReferences, input.productImages.detailBack),
+      input.productImages.back
+    )
   );
 
   // --- Foto SERI (varian warna lain, 0-6x, TIDAK termasuk 4-foto-tetap —

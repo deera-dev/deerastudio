@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock,
   Film,
+  ImageDown,
   Loader2,
   Plus,
   RefreshCw,
@@ -96,6 +97,7 @@ export default function HistoryPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
   // "+ Tambah Warna Seri" — nambah warna baru ke set yang SUDAH ADA tanpa
   // re-generate utama (lihat app/api/generation-sets/[id]/add-seri/route.ts).
   const [productWarnaOptions, setProductWarnaOptions] = useState<string[]>([]);
@@ -482,9 +484,42 @@ export default function HistoryPage() {
     }
   }
 
+  // Backfill thumbnail foto lama (lihat app/api/admin/backfill-thumbs/route.ts):
+  // loop batch kecil sampai tidak ada sisa, lalu reload supaya grid memakai
+  // thumbnail baru.
+  async function handleOptimizeOld() {
+    setOptimizing(true);
+    const toastId = toast.loading("Mengoptimalkan foto lama...");
+    try {
+      let processed = 0;
+      for (let i = 0; i < 200; i++) {
+        const res = await fetch("/api/admin/backfill-thumbs", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Gagal mengoptimalkan");
+        processed += data.processed ?? 0;
+        toast.loading(`Mengoptimalkan foto lama... ${processed} selesai, sisa ${data.remaining}`, {
+          id: toastId,
+        });
+        if (!data.remaining || (data.processed === 0 && !data.errors?.length)) break;
+        if (data.processed === 0) break;
+      }
+      toast.success(`Selesai — ${processed} foto lama dioptimalkan`, { id: toastId });
+      window.location.reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal mengoptimalkan", { id: toastId });
+    } finally {
+      setOptimizing(false);
+    }
+  }
+
   return (
     <AppShell>
       <PageHeader
+        actions={
+          <Button size="sm" variant="ghost" loading={optimizing} onClick={handleOptimizeOld}>
+            <ImageDown className="h-4 w-4" /> Optimalkan foto lama
+          </Button>
+        }
         eyebrow="Riwayat"
         title="History"
         description="Semua set foto yang pernah digenerate. Pilih satu untuk lihat detail, generate ulang gambar, atau publish ke katalog."
@@ -537,7 +572,9 @@ export default function HistoryPage() {
                     {utama?.output_image_url && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={utama.output_image_url}
+                        src={utama.output_thumb_url ?? utama.output_image_url}
+                        loading="lazy"
+                        decoding="async"
                         alt={set.product_kode}
                         className="h-full w-full object-cover"
                       />
@@ -637,7 +674,9 @@ export default function HistoryPage() {
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={gen.output_image_url}
+                              src={gen.output_thumb_url ?? gen.output_image_url}
+                              loading="lazy"
+                              decoding="async"
                               alt={gen.image_role}
                               className="aspect-[3/4] w-full object-cover"
                             />
@@ -777,7 +816,7 @@ export default function HistoryPage() {
                                     )}
                                   >
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={url} alt={g.image_role} className="h-full w-full object-cover" />
+                                    <img src={g.output_thumb_url ?? url} loading="lazy" decoding="async" alt={g.image_role} className="h-full w-full object-cover" />
                                     {order >= 0 && (
                                       <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gold text-[10px] font-semibold text-ink">
                                         {order + 1}

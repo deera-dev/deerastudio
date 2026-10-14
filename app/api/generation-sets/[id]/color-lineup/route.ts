@@ -41,6 +41,7 @@ import {
 } from "@/lib/prompts/color-lineup-generate";
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
+import { makeThumbnailUrl } from "@/lib/images/mirror-output";
 import type { ProductImagesShape } from "@/lib/prompts/nano-banana-generate";
 import { errorMessage } from "@/lib/api-error";
 
@@ -134,6 +135,7 @@ export async function POST(
       colorLabels: references.map((r) => r.label),
     });
     const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
+    const thumbUrl = await makeThumbnailUrl(buffer, "generated-collages");
 
     // Idempotent — cari baris kolase_warna yang SUDAH ADA di set ini dulu.
     const { data: existing } = await supabase
@@ -148,6 +150,7 @@ export async function POST(
         .from("ai_generations")
         .update({
           output_image_url: url,
+          output_thumb_url: thumbUrl,
           status: "completed",
           generation_time_ms: generated.generationTimeMs,
           cost: COST_LINEUP,
@@ -167,6 +170,7 @@ export async function POST(
         variant_product_images: null,
         vto_image_url: null,
         output_image_url: url,
+        output_thumb_url: thumbUrl,
         has_stage2: true,
         status: "completed",
         generation_time_ms: generated.generationTimeMs,

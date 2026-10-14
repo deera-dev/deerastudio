@@ -153,6 +153,7 @@
 //    garment SUDAH DISETUJUI dan harus dipertahankan persis, AI cuma boleh
 //    ubah apa yang diminta di correctionNote (pose/background/ketajaman/dst).
 import { fal, FAL_MODELS } from "../fal/client";
+import { mirrorOutputImage } from "../images/mirror-output";
 
 // --- Referensi produk berlabel (PRODUCT REFERENCE MAP) --------------------
 
@@ -162,6 +163,15 @@ export type ProductImagesShape = {
   detailNeck?: string;
   detailSleeve?: string;
   detailHand?: string;
+  // Detail PUNGGUNG (Oktober 2026 — admin: "adjust detail dada ganti jadi
+  // detail punggung, karena redundan dengan detail leher, sedangkan detail
+  // punggung lebih dibutuhkan"): menggantikan slot detailChest di UI/input
+  // baru. detailChest TETAP ada di tipe/label/urutan hanya supaya set LAMA
+  // yg sudah menyimpan foto dada di product_images tetap terbaca saat
+  // regenerate/tambah seri — tidak ada lagi field upload-nya di halaman
+  // Generate.
+  detailBack?: string;
+  /** @deprecated pakai detailBack — hanya utk data set lama */
   detailChest?: string;
   detailHem?: string;
   fullBody?: string;
@@ -182,6 +192,8 @@ const GARMENT_LABELS: Record<keyof ProductImagesShape, string> = {
     "FRONT FLAT-LAY — overall front construction, silhouette, print placement, and proportions",
   detailChest:
     "CHEST DETAIL — use ONLY to inspect embroidery, print, texture, buttons, and construction around the chest",
+  detailBack:
+    "BACK DETAIL — close-up of the REAR of the garment; use ONLY to inspect back-panel embroidery, print, texture, seams, zipper/closure, and construction. Priority source for fine back detail in any back-view photograph",
   detailNeck:
     "NECK DETAIL — use ONLY to inspect neckline, collar, and surrounding construction",
   detailSleeve:
@@ -207,6 +219,7 @@ const GARMENT_ORDER: (keyof ProductImagesShape)[] = [
   "detailHand",
   "detailHem",
   "back",
+  "detailBack",
   "fullBody",
 ];
 
@@ -301,7 +314,8 @@ export interface NanoBananaGenerateInput {
 }
 
 export interface NanoBananaGenerateResult {
-  imageUrl: string;
+  imageUrl: string; // sudah disalin ke Supabase Storage (fallback: URL fal.ai asli)
+  thumbUrl: string | null; // thumbnail JPEG ringan utk grid/list
   seed: number;
   description: string;
   generationTimeMs: number;
@@ -455,8 +469,11 @@ export async function runNanoBananaGenerate(
 
   const data = result.data as { images: { url: string }[]; description?: string };
 
+  const mirrored = await mirrorOutputImage(data.images[0].url);
+
   return {
-    imageUrl: data.images[0].url,
+    imageUrl: mirrored.fullUrl,
+    thumbUrl: mirrored.thumbUrl,
     seed,
     description: data.description ?? "",
     generationTimeMs: Date.now() - startedAt,
@@ -521,8 +538,11 @@ export async function runNanoBananaRefine(input: {
 
   const data = result.data as { images: { url: string }[]; description?: string };
 
+  const mirrored = await mirrorOutputImage(data.images[0].url);
+
   return {
-    imageUrl: data.images[0].url,
+    imageUrl: mirrored.fullUrl,
+    thumbUrl: mirrored.thumbUrl,
     seed,
     description: data.description ?? "",
     generationTimeMs: Date.now() - startedAt,

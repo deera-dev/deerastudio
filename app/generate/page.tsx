@@ -72,7 +72,7 @@ type ProductImages = {
   detailNeck: string | null;
   detailSleeve: string | null;
   detailHand: string | null; // close-up pergelangan/manset tangan — BEDA dari detailSleeve (lengan/bahu)
-  detailChest: string | null;
+  detailBack: string | null; // detail punggung (gantikan Detail Dada, Okt 2026)
   detailHem: string | null;
   fullBody: string | null;
 };
@@ -154,7 +154,7 @@ export default function GeneratePage() {
     detailNeck: null,
     detailSleeve: null,
     detailHand: null,
-    detailChest: null,
+    detailBack: null,
     detailHem: null,
     fullBody: null,
   });
@@ -289,7 +289,7 @@ export default function GeneratePage() {
             detailNeck: productImages.detailNeck ?? undefined,
             detailSleeve: productImages.detailSleeve ?? undefined,
             detailHand: productImages.detailHand ?? undefined,
-            detailChest: productImages.detailChest ?? undefined,
+            detailBack: productImages.detailBack ?? undefined,
             detailHem: productImages.detailHem ?? undefined,
             fullBody: productImages.fullBody ?? undefined,
           },
@@ -631,10 +631,11 @@ export default function GeneratePage() {
                 onChange={(url) => setProductImages((p) => ({ ...p, back: url }))}
               />
               <ImageUploadField
-                label="Detail Dada"
+                label="Detail Punggung"
                 folder="products"
-                value={productImages.detailChest}
-                onChange={(url) => setProductImages((p) => ({ ...p, detailChest: url }))}
+                value={productImages.detailBack}
+                onChange={(url) => setProductImages((p) => ({ ...p, detailBack: url }))}
+                hint="Close-up bagian belakang (bordir/motif/resleting punggung)"
               />
               <ImageUploadField
                 label="Detail Leher"

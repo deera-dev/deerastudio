@@ -160,6 +160,7 @@ export async function POST(
         .from("ai_generations")
         .update({
           output_image_url: result.imageUrl,
+          output_thumb_url: result.thumbUrl,
           has_stage2: true,
           status: "completed",
           generation_time_ms: result.generationTimeMs,

@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
       .from("freeform_generations")
       .update({
         output_image_url: result.imageUrl,
+        output_thumb_url: result.thumbUrl,
         status: "completed",
         generation_time_ms: result.generationTimeMs,
         cost: COST_FREEFORM,

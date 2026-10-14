@@ -108,6 +108,7 @@ import { composeBackground, type BackgroundMode } from "@/lib/prompts/background
 import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-template/set-collage";
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
+import { makeThumbnailUrl } from "@/lib/images/mirror-output";
 import type { BackgroundPresetRow, Generation } from "@/types/database";
 
 // BUG FIX (Agustus 2026 — admin: klik "Generate Ulang", status baris tetap
@@ -203,6 +204,7 @@ export async function POST(
           .update({
             vto_image_url: null,
             output_image_url: result.imageUrl,
+          output_thumb_url: result.thumbUrl,
             status: "completed",
             generation_time_ms: result.generationTimeMs,
             cost: COST_FULL_PASS,
@@ -272,7 +274,10 @@ export async function POST(
       // gambar produk PERTAMA supaya klausa BACK VIEW REFERENCE PRIORITY di
       // prompt lebih kuat.
       if (gen.image_role === "angle") {
-        garmentReferences = prioritizeReference(garmentReferences, set.product_images.back);
+        garmentReferences = prioritizeReference(
+          prioritizeReference(garmentReferences, set.product_images.detailBack),
+          set.product_images.back
+        );
       }
 
       const result = await runNanoBananaGenerate({
@@ -305,6 +310,7 @@ export async function POST(
         .update({
           vto_image_url: null,
           output_image_url: result.imageUrl,
+          output_thumb_url: result.thumbUrl,
           status: "completed",
           generation_time_ms: result.generationTimeMs,
           cost: COST_FULL_PASS,
@@ -347,6 +353,7 @@ export async function POST(
         .update({
           vto_image_url: null,
           output_image_url: url,
+          output_thumb_url: null,
           status: "completed",
           generation_time_ms: null,
           cost: 0,
@@ -388,6 +395,7 @@ export async function POST(
         .update({
           vto_image_url: null,
           output_image_url: url,
+          output_thumb_url: null,
           status: "completed",
           generation_time_ms: (crop1.generationTimeMs ?? 0) + (crop2.generationTimeMs ?? 0),
           // 2 crop tersembunyi tetap pakai fal.ai (Kontext) — cost regenerate
@@ -436,12 +444,14 @@ export async function POST(
         colorLabels: references.map((r) => r.label),
       });
       const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
+      const thumbUrl = await makeThumbnailUrl(buffer, "generated-collages");
 
       await supabase
         .from("ai_generations")
         .update({
           vto_image_url: null,
           output_image_url: url,
+          output_thumb_url: thumbUrl,
           status: "completed",
           generation_time_ms: generated.generationTimeMs,
           cost: COST_FULL_PASS,
@@ -484,6 +494,7 @@ export async function POST(
       .update({
         vto_image_url: null,
         output_image_url: crop.imageUrl,
+        output_thumb_url: null,
         status: "completed",
         generation_time_ms: crop.generationTimeMs,
         cost: COST_DERIVED,

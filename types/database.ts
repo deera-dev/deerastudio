@@ -82,7 +82,8 @@ export interface GenerationSet {
     detailNeck?: string;
     detailSleeve?: string;
     detailHand?: string; // close-up pergelangan/manset tangan — BEDA dari detailSleeve (lengan/bahu)
-    detailChest?: string;
+    detailBack?: string; // detail punggung (gantikan detailChest sejak Okt 2026)
+    detailChest?: string; // legacy — set lama saja, tidak ada upload baru
     detailHem?: string;
     fullBody?: string;
   };
@@ -201,6 +202,7 @@ export interface Generation {
   variant_product_images: Record<string, string> | null; // hanya terisi utk role "seri" — { image: "<url foto full-body warna itu>" }, dipakai ulang saat regenerate (lihat REVISI hemat-foto)
   vto_image_url: string | null;
   output_image_url: string | null;
+  output_thumb_url?: string | null; // thumbnail JPEG ringan utk grid/list (null utk data lama sebelum backfill)
   has_stage2: boolean;
   status: GenerationStatus;
   generation_time_ms: number | null;
@@ -264,6 +266,7 @@ export interface FreeformGeneration {
   reference_image_urls: string[]; // kosong [] = text-to-image murni (lihat NANO_BANANA_TEXT_TO_IMAGE)
   aspect_ratio: string;
   output_image_url: string | null;
+  output_thumb_url?: string | null; // thumbnail JPEG ringan utk grid/list (null utk data lama sebelum backfill)
   status: GenerationStatus;
   generation_time_ms: number | null;
   cost: number | null;

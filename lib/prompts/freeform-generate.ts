@@ -15,6 +15,7 @@
 // - referenceImageUrls ada isinya -> NANO_BANANA ("fal-ai/nano-banana-pro/
 //   edit", WAJIB minimal 1 image_urls) — edit/kombinasikan foto referensi
 //   sesuai prompt.
+import { mirrorOutputImage } from "../images/mirror-output";
 import { fal, FAL_MODELS } from "../fal/client";
 
 // Union literal yang diterima param `aspect_ratio` Nano Banana Pro (fal
@@ -42,6 +43,7 @@ export interface FreeformGenerateInput {
 
 export interface FreeformGenerateResult {
   imageUrl: string;
+  thumbUrl: string | null;
   seed: number;
   generationTimeMs: number;
 }
@@ -70,8 +72,11 @@ export async function runFreeformGenerate(
 
   const data = result.data as { images: { url: string }[] };
 
+  const mirrored = await mirrorOutputImage(data.images[0].url, "freeform-out");
+
   return {
-    imageUrl: data.images[0].url,
+    imageUrl: mirrored.fullUrl,
+    thumbUrl: mirrored.thumbUrl,
     seed,
     generationTimeMs: Date.now() - startedAt,
   };
