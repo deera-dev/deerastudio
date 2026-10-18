@@ -15,7 +15,7 @@ import { zodErrorMessage, errorMessage } from "@/lib/api-error";
 export const maxDuration = 300;
 
 const requestSchema = z.object({
-  prompt: z.string().trim().min(1).max(2000),
+  prompt: z.string().trim().min(1).max(5000),
   referenceImageUrls: z.array(z.string().url()).max(6).optional(),
   // Subset sesuai ASPECT_OPTIONS di app/generate-bebas/page.tsx — harus
   // cocok dgn union FreeformAspectRatio di lib/prompts/freeform-generate.ts.
@@ -63,7 +63,10 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
   if (insertError || !row) {
-    return NextResponse.json({ error: "Gagal menyimpan permintaan generate" }, { status: 500 });
+    return NextResponse.json(
+      { error: `Gagal menyimpan permintaan generate: ${insertError?.message ?? "tidak ada data kembali"}` },
+      { status: 500 }
+    );
   }
 
   try {
