@@ -16,6 +16,11 @@
 // Idempotent per product_kode: dipanggil ulang utk produk yang sudah punya
 // baris wadah (model_id & pose_id masih null) akan reuse baris itu, bukan
 // bikin duplikat.
+//
+// REVISI (Oktober 2026 — lihat color-lineup/route.ts): fitur Lineup Warna
+// tidak lagi pakai konsep "foto utama" sama sekali, jadi product_images di
+// sini cuma placeholder kosong ("front": "") — satu-satunya sumber warna
+// adalah lineup_color_refs yang diisi admin lewat "+ Tambah Warna".
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -34,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   const { data: product, error: productError } = await supabase
     .from("products")
-    .select("kode, image")
+    .select("kode")
     .eq("kode", productKode)
     .single();
   if (productError || !product) {
@@ -58,7 +63,7 @@ export async function POST(req: NextRequest) {
     .from("ai_generation_sets")
     .insert({
       product_kode: productKode,
-      product_images: { front: product.image ?? "" },
+      product_images: { front: "" },
       status: "completed",
     })
     .select("id")
