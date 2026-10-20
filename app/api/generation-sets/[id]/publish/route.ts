@@ -20,7 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { uploadPublishedImage } from "@/lib/cloudinary/client";
+import { uploadPublishedImage, slugifyWarna } from "@/lib/cloudinary/client";
 
 const requestSchema = z.object({
   imageIds: z.object({
@@ -33,16 +33,6 @@ const requestSchema = z.object({
     seri: z.array(z.string().uuid()).min(0).max(6).default([]),
   }),
 });
-
-// Slugify nama warna supaya aman dipakai sbg Cloudinary public_id (folder
-// path), mis. "MERAH MARUN" -> "merah-marun".
-function slugifyWarna(warna: string) {
-  return warna
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 export async function POST(
   req: NextRequest,
