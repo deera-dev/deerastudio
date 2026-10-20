@@ -11,9 +11,10 @@
 //
 // Sumber FOTO REFERENSI per warna (dikirim ke AI sbg reference images, BUKAN
 // dipakai literal sbg output lagi — beda dari versi pertama):
-// - Warna utama -> set.product_images.fullBody (kalau ada) atau .front.
-//   Label warnanya set.product_warna, atau "Utama" kalau kosong.
-// - Tiap warna tambahan -> set.lineup_color_refs (jsonb {warna,image}[]).
+// set.lineup_color_refs (jsonb {warna,image}[]) — foto flat-lay ASLI yang
+// admin attach LANGSUNG di halaman Lineup Warna (app/api/generation-sets/
+// [id]/lineup-color-refs/route.ts), TIDAK PERNAH memicu generate AI apa pun
+// sebelum tombol "Generate Lineup Warna" ini sendiri diklik.
 //
 // REVISI BESAR (Agustus 2026 — admin: "disini kan baru tersedia kalau seri
 // warnanya sudah terfoto/generate, nah saya gamau itu karena akan boros
@@ -22,11 +23,15 @@
 // baris ai_generations role "seri" (field variant_product_images.image) —
 // yang keberadaannya MEWAJIBKAN admin generate 1 foto model penuh per warna
 // dulu lewat "Tambah Warna Seri" di History (Rp2.700/warna, murni utk
-// kebutuhan lain di luar lineup). Sekarang sumbernya
-// ai_generation_sets.lineup_color_refs — foto flat-lay ASLI yang admin
-// attach LANGSUNG di halaman Lineup Warna (app/api/generation-sets/[id]/
-// lineup-color-refs/route.ts), TIDAK PERNAH memicu generate AI apa pun
-// sebelum tombol "Generate Lineup Warna" ini sendiri diklik.
+// kebutuhan lain di luar lineup).
+//
+// REVISI (Oktober 2026 — admin: "foto utama gausah ada harusnya... cukup
+// tidak usah dipakai aja foto utamanya, di tampilan itu cukup file2 image
+// baru yang diupload aja"): set.product_images (foto katalog/AI Studio)
+// DIHAPUS sepenuhnya dari sumber referensi — kadang kebetulan sama persis
+// dgn salah satu warna yang sudah di-upload ulang terpisah di sini, bikin 1
+// warna terkirim dobel ke AI. lineup_color_refs sekarang SATU-SATUNYA
+// sumber.
 //
 // Idempotent per set: kalau set ini SUDAH pernah generate lineup (ada baris
 // image_role="kolase_warna"), panggilan berikutnya nge-UPDATE baris yang
@@ -42,7 +47,6 @@ import {
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import { makeThumbnailUrl } from "@/lib/images/mirror-output";
-import type { ProductImagesShape } from "@/lib/prompts/nano-banana-generate";
 import { errorMessage } from "@/lib/api-error";
 
 // Panggilan AI sinkron (fal.subscribe) — jatah waktu longgar, konsisten dgn
@@ -61,8 +65,6 @@ const COST_LINEUP = 2700;
 type SetShape = {
   id: string;
   product_kode: string;
-  product_images: ProductImagesShape;
-  product_warna: string | null;
   lineup_color_refs: { warna: string; image: string }[];
   lineup_color_order: string[];
 };
@@ -81,7 +83,7 @@ export async function POST(
 
   const { data: setRaw, error: setError } = await supabase
     .from("ai_generation_sets")
-    .select("id, product_kode, product_images, product_warna, lineup_color_refs, lineup_color_order")
+    .select("id, product_kode, lineup_color_refs, lineup_color_order")
     .eq("id", id)
     .single();
   if (setError || !setRaw) {
@@ -89,18 +91,9 @@ export async function POST(
   }
   const set = setRaw as SetShape;
 
-  const mainUrl = set.product_images.fullBody ?? set.product_images.front;
-  if (!mainUrl) {
-    return NextResponse.json(
-      { error: "Set ini tidak punya foto warna utama tersimpan — tidak bisa buat lineup warna" },
-      { status: 400 }
-    );
-  }
-
   // Urutan tampil warna (admin: "saya ingin bisa mengatur posisi
   // warnanya") — lihat orderColorReferences() utk logic self-healing.
   const references: ColorLineupReference[] = orderColorReferences(
-    { url: mainUrl, label: set.product_warna || "Utama" },
     (set.lineup_color_refs ?? []).map((r) => ({ warna: r.warna, ref: { url: r.image, label: r.warna } })),
     set.lineup_color_order
   );
@@ -109,14 +102,14 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Belum ada warna tambahan utk produk ini — tambah minimal 1 warna dulu (tombol \"+ Tambah Warna\") sebelum buat lineup warna",
+          "Minimal 2 warna dulu (tombol \"+ Tambah Warna\") sebelum buat lineup warna",
       },
       { status: 400 }
     );
   }
   if (references.length > 7) {
     return NextResponse.json(
-      { error: "Maksimal 7 warna (1 utama + 6 tambahan) per lineup — kurangi warna dulu" },
+      { error: "Maksimal 7 warna per lineup — kurangi warna dulu" },
       { status: 400 }
     );
   }

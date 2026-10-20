@@ -410,20 +410,16 @@ export async function POST(
     // role "kolase_warna" (REVISI BESAR Agustus 2026 — lihat types/database.ts
     // & app/api/generation-sets/[id]/color-lineup/route.ts utk latar
     // belakang lengkap pivot ke AI) — panggilan AI (Nano Banana Pro) yang
-    // mengambil foto ASLI warna utama (set.product_images) + set.lineup_
-    // color_refs (foto flat-lay ASLI per warna, dikelola langsung dari
-    // halaman Lineup Warna — lihat app/api/generation-sets/[id]/
-    // lineup-color-refs/route.ts) sbg REFERENCE, lalu AI menyusun ULANG 1
-    // scene baru. `note` (opsional, dari dialog regenerate) diteruskan sbg
+    // mengambil set.lineup_color_refs (foto flat-lay ASLI per warna, dikelola
+    // langsung dari halaman Lineup Warna — lihat app/api/generation-sets/
+    // [id]/lineup-color-refs/route.ts) sbg REFERENCE, lalu AI menyusun ULANG
+    // 1 scene baru. `note` (opsional, dari dialog regenerate) diteruskan sbg
     // styleNote tambahan ke AI — mis. "background lebih terang".
+    // set.product_images/product_warna TIDAK dipakai di sini (Oktober 2026 —
+    // lihat color-lineup/route.ts utk alasan lengkap foto utama dihapus dari
+    // fitur ini).
     if (gen.image_role === "kolase_warna") {
-      const mainUrl = set.product_images.fullBody ?? set.product_images.front;
-      if (!mainUrl) {
-        throw new Error("Set ini tidak punya foto warna utama tersimpan — tidak bisa regenerate lineup warna");
-      }
-
       const references: ColorLineupReference[] = orderColorReferences(
-        { url: mainUrl, label: set.product_warna || "Utama" },
         (set.lineup_color_refs ?? []).map((r) => ({ warna: r.warna, ref: { url: r.image, label: r.warna } })),
         set.lineup_color_order
       );

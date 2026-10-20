@@ -117,16 +117,23 @@ function buildPrompt(input: ColorLineupGenerateInput): string {
 // perlu membangun `references[]` (app/api/generation-sets/[id]/
 // color-lineup/route.ts & app/api/generations/[id]/regenerate/route.ts
 // cabang kolase_warna) supaya logic-nya konsisten & tidak duplikat.
-// Self-healing: key yang tidak ada di `order` (warna baru ditambah setelah
-// urutan diset, atau order belum pernah diset) di-append di AKHIR sesuai
-// urutan asli argumen (main dulu, lalu lineup_color_refs apa adanya).
+// Self-healing: key yang tidak ada di `order` di-append di akhir sesuai
+// urutan asli argumen.
+//
+// REVISI (Oktober 2026 — admin: "foto utama gausah ada harusnya, karena
+// difoto ulang, jadinya double ada warna [X]... cukup tidak usah dipakai
+// aja foto utamanya, di tampilan itu cukup file2 image baru yang diupload
+// aja"): foto utama produk (ai_generation_sets.product_images) DIHAPUS
+// sepenuhnya dari fitur Lineup Warna — kadang kebetulan sama persis dgn
+// salah satu warna yang sudah di-upload ulang terpisah sbg flat-lay, bikin
+// 1 warna terkirim dobel ke AI. Sekarang SATU-SATUNYA sumber warna adalah
+// lineup_color_refs (foto flat-lay yang memang diupload admin lewat
+// halaman ini), tidak ada lagi konsep "warna utama" yang berbeda/istimewa.
 export function orderColorReferences(
-  mainRef: ColorLineupReference,
   extraRefs: { warna: string; ref: ColorLineupReference }[],
   order: string[] | null | undefined
 ): ColorLineupReference[] {
-  const MAIN_KEY = "__main__";
-  const known = new Map<string, ColorLineupReference>([[MAIN_KEY, mainRef]]);
+  const known = new Map<string, ColorLineupReference>();
   for (const e of extraRefs) known.set(e.warna, e.ref);
 
   const orderedKeys = (order ?? []).filter((k) => known.has(k));
