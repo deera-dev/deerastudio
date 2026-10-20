@@ -256,6 +256,46 @@ export default function LineupWarnaPage() {
   ]);
   const availableWarna = productWarnaOptions.filter((w) => !usedWarna.has(w));
 
+  // Nama warna foto utama (tampil di caption hasil Lineup Warna) — set yang
+  // dibuat otomatis lewat ensure/route.ts (produk yang belum pernah
+  // diproses AI Studio) selalu NULL di sini, jatuh ke fallback "Utama" di
+  // caption (admin: "saya mau warna aslinya yang ada ditulisan itu").
+  // Free-text (bukan dropdown spt "+ Tambah Warna") krn foto utama kadang
+  // mewakili warna yang bahkan tidak ada di products.warna sama sekali.
+  const [mainWarnaDraft, setMainWarnaDraft] = useState("");
+  const [savingMainWarna, setSavingMainWarna] = useState(false);
+  useEffect(() => {
+    setMainWarnaDraft(selectedSet?.product_warna ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKey]);
+
+  async function handleSaveMainWarna() {
+    const trimmed = mainWarnaDraft.trim();
+    if (trimmed === (selectedSet?.product_warna ?? "")) return; // tidak berubah
+    setSavingMainWarna(true);
+    try {
+      const setId = await ensureSetId();
+      if (!setId) return;
+      const res = await fetch(`/api/generation-sets/${setId}/product-warna`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ warna: trimmed }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Gagal menyimpan nama warna");
+      await refreshOne(setId);
+      // ensureSetId() di atas bisa saja memicu transisi virtual->set
+      // (selectedKey berubah), yang me-reset draft ini via effect di atas
+      // SEBELUM baris ini sempat jalan — set ulang eksplisit supaya input
+      // tetap menampilkan nilai yang baru saja tersimpan, bukan kosong.
+      setMainWarnaDraft(trimmed);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menyimpan nama warna");
+    } finally {
+      setSavingMainWarna(false);
+    }
+  }
+
   async function refreshOne(id: string) {
     const supabase = createClient();
     const { data } = await supabase
@@ -645,12 +685,32 @@ export default function LineupWarnaPage() {
                           </span>
                         </div>
                         <ImageUploadField
-                          label={entry.label}
+                          label={entry.kind === "main" ? "Foto Utama" : entry.label}
                           folder="products"
                           value={entry.url}
                           onChange={(url) => handleReplacePhoto(entry, url)}
                           allowClear={false}
                         />
+                        {entry.kind === "main" && (
+                          <>
+                            <input
+                              type="text"
+                              list="main-warna-options"
+                              value={mainWarnaDraft}
+                              onChange={(e) => setMainWarnaDraft(e.target.value)}
+                              onBlur={handleSaveMainWarna}
+                              disabled={savingMainWarna}
+                              placeholder="Pilih/ketik nama warna..."
+                              title="Nama warna foto utama — tampil di caption hasil Lineup Warna (ganti teks 'Utama'). Bisa pilih dari daftar warna produk ini, atau ketik manual kalau tidak ada di daftar."
+                              className="mt-1 w-full rounded-md border border-white/[0.08] bg-white/[0.03] px-1.5 py-1 text-[11px] text-text placeholder:text-text-faint focus:border-gold/50 focus:outline-none"
+                            />
+                            <datalist id="main-warna-options">
+                              {productWarnaOptions.map((w) => (
+                                <option key={w} value={w} />
+                              ))}
+                            </datalist>
+                          </>
+                        )}
                         <div className="mt-1 flex items-center justify-between gap-1">
                           <button
                             type="button"
