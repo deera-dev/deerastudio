@@ -56,6 +56,14 @@
 //       terpisah sbg flat-lay, bikin 1 warna terkirim dobel ke AI.
 //       lineup_color_refs (foto yang memang diupload lewat "+ Tambah
 //       Warna" di halaman ini) sekarang SATU-SATUNYA sumber warna.
+//  v6 (Oktober 2026) — admin: "saya ingin yang sudah berhasil tergenerate
+//       katalog warnanya, otomatis terupload ke serian warna produknya...
+//       di tiap produk ada foto utama, foto seri dan foto detail lain".
+//       Begitu "Generate Lineup Warna"/"Buat Ulang Lineup" sukses, tiap
+//       foto flat-lay warna otomatis dipublish ke products.warna_images
+//       ("foto seri" katalog Deera utama) lewat lib/catalog/
+//       publish-warna-series.ts — tidak perlu publish manual terpisah lagi
+//       khusus utk warna.
 //
 // Alur halaman ini: pilih produk -> upload foto flat-lay tiap warna (ganti
 // foto yang buram/salah, tambah warna baru, hapus warna) -> pilih gaya
@@ -435,6 +443,14 @@ export default function LineupWarnaPage() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Gagal membuat lineup warna");
       toast.success(lineupGen ? "Lineup warna diperbarui" : "Lineup warna berhasil dibuat");
+      // Admin: "yang sudah berhasil tergenerate katalog warnanya, otomatis
+      // terupload ke serian warna produknya" — lineup-nya tetap sukses
+      // walau sync ke katalog produk gagal (lihat
+      // publishWarnaSeriesToProduct di color-lineup/route.ts), cuma
+      // dikasih peringatan terpisah supaya admin tahu perlu cek manual.
+      if (data?.warnaSyncError) {
+        toast.warning(`Lineup tersimpan, tapi gagal sync ke serian warna produk: ${data.warnaSyncError}`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal membuat lineup warna");
     } finally {

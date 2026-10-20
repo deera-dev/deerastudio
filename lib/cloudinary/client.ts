@@ -25,3 +25,15 @@ export async function uploadPublishedImage(
     overwrite: true,
   });
 }
+
+// Slugify nama warna supaya aman dipakai sbg Cloudinary public_id (folder
+// path), mis. "MERAH MARUN" -> "merah-marun". Dipakai di mana pun warna jadi
+// bagian dari role (publish/route.ts, lib/catalog/publish-warna-series.ts)
+// supaya public_id "seri-<warna>" konsisten di semua jalur publish.
+export function slugifyWarna(warna: string) {
+  return warna
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}

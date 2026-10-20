@@ -36,6 +36,15 @@
 // Idempotent per set: kalau set ini SUDAH pernah generate lineup (ada baris
 // image_role="kolase_warna"), panggilan berikutnya nge-UPDATE baris yang
 // sama (bukan bikin baris baru).
+//
+// REVISI (Oktober 2026 — admin: "saya ingin yang sudah berhasil tergenerate
+// katalog warnanya, otomatis terupload ke serian warna produknya"): begitu
+// generate di sini SUKSES, tiap foto flat-lay di lineup_color_refs otomatis
+// dipublish ke products.warna_images ("foto seri" katalog Deera utama) lewat
+// publishWarnaSeriesToProduct() — admin tidak perlu publish manual terpisah
+// lagi khusus utk warna. Non-blocking: kalau sync ini gagal, generation yang
+// sudah sukses & mahal TETAP disimpan, cuma warnaSyncError diisi di response
+// sbg peringatan (lihat app/lineup-warna/page.tsx handleGenerate).
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -47,6 +56,7 @@ import {
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import { makeThumbnailUrl } from "@/lib/images/mirror-output";
+import { publishWarnaSeriesToProduct } from "@/lib/catalog/publish-warna-series";
 import { errorMessage } from "@/lib/api-error";
 
 // Panggilan AI sinkron (fal.subscribe) — jatah waktu longgar, konsisten dgn
@@ -130,6 +140,14 @@ export async function POST(
     const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
     const thumbUrl = await makeThumbnailUrl(buffer, "generated-collages");
 
+    // Sync ke products.warna_images — lihat REVISI Oktober 2026 di atas.
+    // Dijalankan SEBELUM nyimpan baris ai_generations biar warnaSyncError
+    // sudah siap dikirim bareng di response sukses (satu round-trip).
+    const { error: warnaSyncError } = await publishWarnaSeriesToProduct(
+      set.product_kode,
+      set.lineup_color_refs ?? []
+    );
+
     // Idempotent — cari baris kolase_warna yang SUDAH ADA di set ini dulu.
     const { data: existing } = await supabase
       .from("ai_generations")
@@ -150,7 +168,7 @@ export async function POST(
           error_message: null,
         })
         .eq("id", existing.id);
-      return NextResponse.json({ generationId: existing.id, imageUrl: url });
+      return NextResponse.json({ generationId: existing.id, imageUrl: url, warnaSyncError });
     }
 
     const { data: created, error: insertError } = await supabase
@@ -175,7 +193,7 @@ export async function POST(
       return NextResponse.json({ error: "Gagal menyimpan hasil lineup warna" }, { status: 500 });
     }
 
-    return NextResponse.json({ generationId: created.id, imageUrl: url });
+    return NextResponse.json({ generationId: created.id, imageUrl: url, warnaSyncError });
   } catch (err) {
     return NextResponse.json(
       { error: errorMessage(err, "Gagal membuat lineup warna") },
