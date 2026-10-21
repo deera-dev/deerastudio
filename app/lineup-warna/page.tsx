@@ -431,6 +431,25 @@ export default function LineupWarnaPage() {
     void persistColorOrder(newOrder);
   }
 
+  // Admin: drag-and-drop native HTML5 di atas tidak jalan di kebanyakan HP
+  // (touch drag butuh handler terpisah & suka ke-trigger scroll halaman
+  // bukannya drag). Drpd nambah touch-drag yang rawan bug, di layar sempit
+  // (mobile) handle drag diganti dropdown posisi — pilih angka, posisinya
+  // langsung pindah ke situ.
+  function handleMoveColorToPosition(entry: ColorEntry, newPosition: number) {
+    const key = keyOf(entry);
+    const currentOrder = colorEntries.map(keyOf);
+    const fromIdx = currentOrder.indexOf(key);
+    if (fromIdx === -1) return;
+    const toIdx = Math.min(Math.max(newPosition - 1, 0), currentOrder.length - 1);
+    if (fromIdx === toIdx) return;
+
+    const newOrder = [...currentOrder];
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, key);
+    void persistColorOrder(newOrder);
+  }
+
   async function handleGenerate() {
     if (!selectedSet) return;
     setGenerating(true);
@@ -556,9 +575,10 @@ export default function LineupWarnaPage() {
               <CardBody>
                 <p className="mb-3 text-xs text-text-faint">
                   {colorEntries.length} warna akan dikirim sbg referensi ke AI, URUT kiri ke kanan
-                  sesuai posisi di bawah ini — geser pakai panah utk atur urutannya. Desain & warna
-                  tiap produk WAJIB tetap persis sama dengan foto ini, AI cuma menyusun ulang
-                  presentasinya. Foto buram/salah? Tarik foto baru langsung ke kotaknya utk mengganti.
+                  sesuai posisi di bawah ini — tarik (drag) handle-nya utk atur urutan, atau di HP
+                  pakai dropdown posisi. Desain & warna tiap produk WAJIB tetap persis sama dengan
+                  foto ini, AI cuma menyusun ulang presentasinya. Foto buram/salah? Tarik foto baru
+                  langsung ke kotaknya utk mengganti.
                 </p>
 
                 <div className="flex flex-wrap gap-4">
@@ -583,6 +603,10 @@ export default function LineupWarnaPage() {
                           dragOverKey === key && draggedKey && draggedKey !== key && "ring-2 ring-gold/60"
                         )}
                       >
+                        {/* Desktop/tablet (pointer mouse): drag handle. Drag
+                            native HTML5 ini tidak reliable di touchscreen,
+                            jadi disembunyikan di layar sempit & diganti
+                            dropdown posisi di bawah. */}
                         <div
                           draggable
                           onDragStart={(e) => {
@@ -594,13 +618,27 @@ export default function LineupWarnaPage() {
                             setDragOverKey(null);
                           }}
                           title="Tarik utk atur urutan"
-                          className="mb-1 flex cursor-grab items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] py-1 text-text-faint active:cursor-grabbing"
+                          className="mb-1 hidden cursor-grab items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] py-1 text-text-faint active:cursor-grabbing sm:flex"
                         >
                           <GripVertical className="h-3.5 w-3.5" />
                           <span className="text-[10px] font-semibold uppercase tracking-wide">
                             {i + 1}
                           </span>
                         </div>
+
+                        {/* Mobile (touch): dropdown posisi, ganti drag. */}
+                        <Select
+                          value={i + 1}
+                          onChange={(e) => handleMoveColorToPosition(entry, Number(e.target.value))}
+                          aria-label={`Posisi warna ${entry.label}`}
+                          className="mb-1 flex py-1 pl-2 pr-6 text-[11px] sm:hidden"
+                        >
+                          {colorEntries.map((_, idx) => (
+                            <option key={idx} value={idx + 1}>
+                              Posisi {idx + 1}
+                            </option>
+                          ))}
+                        </Select>
                         <ImageUploadField
                           label={entry.label}
                           folder="products"
