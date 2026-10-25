@@ -57,13 +57,14 @@
 //       lineup_color_refs (foto yang memang diupload lewat "+ Tambah
 //       Warna" di halaman ini) sekarang SATU-SATUNYA sumber warna.
 //  v6 (Oktober 2026) — admin: "saya ingin yang sudah berhasil tergenerate
-//       katalog warnanya, otomatis terupload ke serian warna produknya...
-//       di tiap produk ada foto utama, foto seri dan foto detail lain".
+//       katalog warnanya, otomatis terupload ke serian warna produknya".
 //       Begitu "Generate Lineup Warna"/"Buat Ulang Lineup" sukses, tiap
-//       foto flat-lay warna otomatis dipublish ke products.warna_images
-//       ("foto seri" katalog Deera utama) lewat lib/catalog/
-//       publish-warna-series.ts — tidak perlu publish manual terpisah lagi
-//       khusus utk warna.
+//       foto flat-lay warna otomatis dipublish ke products.warna_images.
+//  v7 (Oktober 2026, DIBALIK) — admin: "abis upload di katalog muncul
+//       perwarna mentahan". Foto flat-lay di lineup_color_refs cuma
+//       REFERENSI asli dikirim ke AI, bukan foto katalog — auto-sync v6
+//       dihapus. warna_images sekarang cuma diisi lewat publish/route.ts
+//       (pilih foto "seri" hasil AI yang sudah completed, eksplisit).
 //
 // Alur halaman ini: pilih produk -> upload foto flat-lay tiap warna (ganti
 // foto yang buram/salah, tambah warna baru, hapus warna) -> pilih gaya
@@ -462,14 +463,6 @@ export default function LineupWarnaPage() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Gagal membuat lineup warna");
       toast.success(lineupGen ? "Lineup warna diperbarui" : "Lineup warna berhasil dibuat");
-      // Admin: "yang sudah berhasil tergenerate katalog warnanya, otomatis
-      // terupload ke serian warna produknya" — lineup-nya tetap sukses
-      // walau sync ke katalog produk gagal (lihat
-      // publishWarnaSeriesToProduct di color-lineup/route.ts), cuma
-      // dikasih peringatan terpisah supaya admin tahu perlu cek manual.
-      if (data?.warnaSyncError) {
-        toast.warning(`Lineup tersimpan, tapi gagal sync ke serian warna produk: ${data.warnaSyncError}`);
-      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal membuat lineup warna");
     } finally {

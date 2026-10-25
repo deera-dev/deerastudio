@@ -40,11 +40,17 @@
 // REVISI (Oktober 2026 — admin: "saya ingin yang sudah berhasil tergenerate
 // katalog warnanya, otomatis terupload ke serian warna produknya"): begitu
 // generate di sini SUKSES, tiap foto flat-lay di lineup_color_refs otomatis
-// dipublish ke products.warna_images ("foto seri" katalog Deera utama) lewat
-// publishWarnaSeriesToProduct() — admin tidak perlu publish manual terpisah
-// lagi khusus utk warna. Non-blocking: kalau sync ini gagal, generation yang
-// sudah sukses & mahal TETAP disimpan, cuma warnaSyncError diisi di response
-// sbg peringatan (lihat app/lineup-warna/page.tsx handleGenerate).
+// dipublish ke products.warna_images lewat publishWarnaSeriesToProduct().
+//
+// DIBALIK (Oktober 2026 — admin: "abis upload di katalog muncul perwarna
+// mentahan"): foto flat-lay di lineup_color_refs adalah foto REFERENSI asli
+// (sering difoto asal di lantai/meja, bukan foto katalog), dikirim ke AI
+// sbg bahan generate, BUKAN dimaksudkan utk tampil sbg foto produk. Auto-sync
+// di atas malah menimpa products.warna_images dgn foto mentahan itu —
+// termasuk menimpa foto "seri" yang sudah di-generate AI & dipublish manual
+// lewat endpoint publish/route.ts. Sync otomatis ini DIHAPUS; warna_images
+// hanya diisi lewat publish/route.ts (pilih baris "seri" completed secara
+// eksplisit) atau manual di Admin.
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -56,7 +62,6 @@ import {
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import { makeThumbnailUrl } from "@/lib/images/mirror-output";
-import { publishWarnaSeriesToProduct } from "@/lib/catalog/publish-warna-series";
 import { errorMessage } from "@/lib/api-error";
 
 // Panggilan AI sinkron (fal.subscribe) — jatah waktu longgar, konsisten dgn
@@ -140,14 +145,6 @@ export async function POST(
     const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
     const thumbUrl = await makeThumbnailUrl(buffer, "generated-collages");
 
-    // Sync ke products.warna_images — lihat REVISI Oktober 2026 di atas.
-    // Dijalankan SEBELUM nyimpan baris ai_generations biar warnaSyncError
-    // sudah siap dikirim bareng di response sukses (satu round-trip).
-    const { error: warnaSyncError } = await publishWarnaSeriesToProduct(
-      set.product_kode,
-      set.lineup_color_refs ?? []
-    );
-
     // Idempotent — cari baris kolase_warna yang SUDAH ADA di set ini dulu.
     const { data: existing } = await supabase
       .from("ai_generations")
@@ -168,7 +165,7 @@ export async function POST(
           error_message: null,
         })
         .eq("id", existing.id);
-      return NextResponse.json({ generationId: existing.id, imageUrl: url, warnaSyncError });
+      return NextResponse.json({ generationId: existing.id, imageUrl: url });
     }
 
     const { data: created, error: insertError } = await supabase
@@ -193,7 +190,7 @@ export async function POST(
       return NextResponse.json({ error: "Gagal menyimpan hasil lineup warna" }, { status: 500 });
     }
 
-    return NextResponse.json({ generationId: created.id, imageUrl: url, warnaSyncError });
+    return NextResponse.json({ generationId: created.id, imageUrl: url });
   } catch (err) {
     return NextResponse.json(
       { error: errorMessage(err, "Gagal membuat lineup warna") },
