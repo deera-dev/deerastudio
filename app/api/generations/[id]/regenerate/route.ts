@@ -109,7 +109,6 @@ import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-temp
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
 import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
 import { makeThumbnailUrl } from "@/lib/images/mirror-output";
-import { publishWarnaSeriesToProduct } from "@/lib/catalog/publish-warna-series";
 import type { BackgroundPresetRow, Generation } from "@/types/database";
 
 // BUG FIX (Agustus 2026 — admin: klik "Generate Ulang", status baris tetap
@@ -443,14 +442,12 @@ export async function POST(
       const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
       const thumbUrl = await makeThumbnailUrl(buffer, "generated-collages");
 
-      // Sync ke products.warna_images ("foto seri" katalog Deera) — admin:
-      // "yang sudah berhasil tergenerate katalog warnanya, otomatis
-      // terupload ke serian warna produknya". Non-blocking, lihat
-      // publish-warna-series.ts.
-      const { error: warnaSyncError } = await publishWarnaSeriesToProduct(
-        set.product_kode,
-        set.lineup_color_refs ?? []
-      );
+      // Auto-sync ke products.warna_images (yang sempat ada di sini) DIHAPUS
+      // Oktober 2026 — admin: "abis upload di katalog muncul perwarna
+      // mentahan". lineup_color_refs cuma foto REFERENSI mentah dikirim ke
+      // AI, bukan foto katalog — lihat catatan lengkap di
+      // app/api/generation-sets/[id]/color-lineup/route.ts. warna_images
+      // sekarang cuma diisi lewat publish/route.ts (foto "seri" hasil AI).
 
       await supabase
         .from("ai_generations")
@@ -464,7 +461,7 @@ export async function POST(
         })
         .eq("id", id);
 
-      return NextResponse.json({ status: "completed", imageUrl: url, warnaSyncError });
+      return NextResponse.json({ status: "completed", imageUrl: url });
     }
 
     // role "detail" — turunkan ulang dari foto utama yang sedang aktif
