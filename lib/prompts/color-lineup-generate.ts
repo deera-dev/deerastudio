@@ -53,6 +53,17 @@ export interface ColorLineupReference {
 // Dipasangkan dgn foto tampak depan (potret, aspect sama) lewat fitur
 // "Kolase 2 Foto" (app/history/page.tsx, lib/image-template/
 // photo-collage.tsx).
+//
+// REVISI (November 2026, SEGERA setelah rilis pertama — admin kirim
+// screenshot referensi kompetitor [tumpukan baju terlipat rapi, ditumpuk
+// vertikal dari atas ke bawah, tiap lapis motif/warnanya kelihatan jelas]
+// + "untuk seri warna vertical saya mau model terlipat aja ya, kurang
+// lebih seperti ini"): klausa "vertical" versi PERTAMA (garment digantung
+// di hook pada rail vertikal) DIGANTI TOTAL jadi gaya TERLIPAT ditumpuk —
+// sama konsepnya dgn gaya "folded" di atas (tiap garment dilipat jadi
+// tumpukan rapi), TAPI disusun MENUMPUK vertikal (1 tumpukan di atas
+// tumpukan lain, offset dikit biar tiap lapis kelihatan) alih-alih
+// berjejer ke samping.
 export type ColorLineupStyle = "hanger" | "fanned" | "folded" | "flatlay" | "vertical";
 
 export interface ColorLineupGenerateInput {
@@ -93,10 +104,10 @@ function buildPrompt(input: ColorLineupGenerateInput): string {
     flatlay: `Lay each of the ${count} garments fully flat and fully extended (unfolded, not hanging, not standing) on a clean flat surface, arranged in a single neat horizontal row with even spacing between each garment and no overlap. Shoot from directly overhead (true top-down flat-lay angle) so each garment's complete silhouette — collar, both sleeves, and full hem — is visible in one unbroken outline, with soft natural fabric creases only, no styling folds.`,
     // "Vertical" — satu-satunya gaya POTRET (tinggi > lebar), dibuat
     // khusus supaya hasilnya enak dipasangkan di samping foto tampak depan
-    // (sama-sama potret) lewat fitur "Kolase 2 Foto". Garment digantung
-    // menurun 1 kolom dari atas ke bawah (bukan berjejer ke samping spt 4
-    // gaya lain).
-    vertical: `Arrange all ${count} garments stacked vertically in a single column from top to bottom, each hanging face-forward from its own hook mounted on a slim vertical wall-mounted rail or peg strip, evenly spaced with a clear gap between each garment and no overlap. Every garment must be fully visible from a consistent front-facing angle (collar/neckline down to hem), hanging naturally with realistic fabric weight and drape — this is a TALL, PORTRAIT-oriented composition (taller than it is wide), not a wide horizontal row.`,
+    // (sama-sama potret) lewat fitur "Kolase 2 Foto". REVISI (lihat catatan
+    // di atas, referensi admin): gaya terlipat ditumpuk vertikal (konsep
+    // sama spt "folded", tapi ditumpuk ke bawah bukan berjejer ke samping).
+    vertical: `Fold each of the ${count} garments neatly into a compact rectangular stack (as if freshly folded for a boutique display), then stack all ${count} folded stacks directly on top of one another in a single vertical pile from top to bottom, each stack offset forward just enough that the folded front edge and fabric print of every layer beneath remains clearly visible (like a neat pile of folded sweaters on a shelf) — garments must NOT be arranged side by side. Photograph from a gentle elevated three-quarter angle looking down into the pile, on a soft plush neutral surface (e.g. a light-colored fur rug or folded textile) beneath, so the top surface and folded front edge of each layer legibly show its fabric print, texture, and color — not just a flat colored rectangle. Keep every fold tidy and rectangular, not messy or crumpled, with a small visible gap/offset between each layer so none are fully hidden. This is a TALL, PORTRAIT-oriented composition (taller than it is wide), not a wide horizontal row.`,
   };
   const styleClause = STYLE_CLAUSES[style];
 

@@ -138,11 +138,14 @@ const STYLE_OPTIONS: { value: ColorLineupStyle; title: string; desc: string }[] 
   // warna, seri warna horizontal seperti yang sekarang, dan yang baru seri
   // warna vertical biar bisa di collase nanti dengan foto tampak depan".
   // Satu-satunya gaya POTRET (4 gaya lain di atas tetap horizontal) —
-  // lihat lib/prompts/color-lineup-generate.ts.
+  // lihat lib/prompts/color-lineup-generate.ts. REVISI (segera setelah
+  // rilis pertama — admin kirim referensi tumpukan baju terlipat gaya
+  // kompetitor: "saya mau model terlipat aja ya"): deskripsi diganti dari
+  // "digantung" jadi "dilipat ditumpuk", sesuai klausa prompt yang baru.
   {
     value: "vertical",
-    title: "Vertical",
-    desc: "Semua warna digantung menurun 1 kolom dari atas ke bawah — potret, cocok dikolase dengan foto tampak depan.",
+    title: "Vertical (Terlipat)",
+    desc: "Semua warna dilipat rapi, ditumpuk vertikal dari atas ke bawah — potret, cocok dikolase dengan foto tampak depan.",
   },
 ];
 
