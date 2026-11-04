@@ -183,6 +183,18 @@ export interface VideoClipJob {
 //      null utk role ini (bukan milik 1 warna spesifik, agregat semua
 //      warna dalam set — daftar warnanya sendiri ada di
 //      ai_generation_sets.lineup_color_refs, bukan di baris Generation).
+//
+// "kolase_pilihan" (BARU November 2026) — admin: "saya mau nambah fitur
+// collase atau foto grid dimana bisa bikin 2 foto bergabung jadi 1,
+// rencananya seperti menggabungkan foto tampak depan dan tampak belakang
+// buat di share ke langganan, atau foto tampak depan dengan foto seri
+// warna lengkap". BEDA dari "kolase_gabungan": sumber fotonya BEBAS dipilih
+// admin (bisa utama+angle, bisa utama+kolase_warna, dll — lihat
+// app/api/generation-sets/[id]/collage/route.ts), bukan panggilan AI
+// (compositing next/og, lib/image-template/photo-collage.tsx), `cost`
+// selalu 0. TIDAK unique per set (admin boleh bikin beberapa kolase dgn
+// pasangan foto berbeda-beda) — `pose_id`/`variant_warna`/
+// `variant_product_images` selalu null utk role ini.
 export type ImageRole =
   | "utama"
   | "detail"
@@ -190,7 +202,8 @@ export type ImageRole =
   | "angle"
   | "kolase_gabungan"
   | "kolase_detail"
-  | "kolase_warna";
+  | "kolase_warna"
+  | "kolase_pilihan";
 export type GenerationStatus = "queued" | "processing" | "completed" | "failed";
 
 export interface Generation {

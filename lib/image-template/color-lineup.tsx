@@ -18,7 +18,6 @@ import { loadFonts } from "./assets";
 
 const WIDTH = 1080;
 const CAPTION_HEIGHT = 130;
-const HEIGHT = WIDTH + CAPTION_HEIGHT; // foto hero AI persegi (aspect_ratio "1:1")
 
 const BACKDROP = "#F7F2E9"; // krem hangat — sama dgn set-collage.tsx
 const INK = "#1F2A1C"; // hijau tua gelap — teks
@@ -27,10 +26,17 @@ export interface RenderColorLineupInput {
   heroImageUrl: string; // hasil runColorLineupGenerate (foto AI, semua warna dlm 1 scene)
   productKode: string;
   colorLabels: string[]; // urut sesuai urutan tampil di scene, dipisah "·" di caption
+  // November 2026 — true kalau style="vertical" (aspect_ratio "3:4" di
+  // runColorLineupGenerate, lihat lib/prompts/color-lineup-generate.ts).
+  // Hero jadi potret (lebih tinggi), bukan persegi, supaya tidak ter-crop
+  // objectFit:cover saat foto AI-nya memang portrait.
+  vertical?: boolean;
 }
 
 export async function renderColorLineupImageResponse(input: RenderColorLineupInput) {
   const fonts = await loadFonts();
+  const heroHeight = input.vertical ? Math.round((WIDTH * 4) / 3) : WIDTH; // 3:4 potret vs 1:1 persegi
+  const HEIGHT = heroHeight + CAPTION_HEIGHT;
 
   const jsx = (
     <div
@@ -44,14 +50,14 @@ export async function renderColorLineupImageResponse(input: RenderColorLineupInp
         backgroundColor: BACKDROP,
       }}
     >
-      <div style={{ display: "flex", width: WIDTH, height: WIDTH, overflow: "hidden" }}>
+      <div style={{ display: "flex", width: WIDTH, height: heroHeight, overflow: "hidden" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={input.heroImageUrl}
           alt=""
           width={WIDTH}
-          height={WIDTH}
-          style={{ width: WIDTH, height: WIDTH, objectFit: "cover" }}
+          height={heroHeight}
+          style={{ width: WIDTH, height: heroHeight, objectFit: "cover" }}
         />
       </div>
 
