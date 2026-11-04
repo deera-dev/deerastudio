@@ -64,6 +64,19 @@ export interface ColorLineupReference {
 // tumpukan rapi), TAPI disusun MENUMPUK vertikal (1 tumpukan di atas
 // tumpukan lain, offset dikit biar tiap lapis kelihatan) alih-alih
 // berjejer ke samping.
+//
+// REVISI (November 2026, SEGERA setelah itu — admin: "saya mau angle yang
+// digunakan adalah angle atas/bird eye, jadi lebih efisien dan tidak ada
+// yang terpotong atau kosong bagiannya"): sudut kamera "gentle elevated
+// three-quarter angle" DIGANTI jadi top-down murni (bird's-eye, kamera
+// lurus ke bawah). Supaya tiap lapis TETAP kelihatan dari sudut selurus
+// itu (dari atas lurus, lapis di bawahnya ketutup lapis di atasnya kalau
+// susunannya lurus vertikal), susunan tumpukannya diubah jadi "shingled"
+// (saling tumpang tindih sedikit kayak genteng/susunan kartu dari atas) —
+// bukan ditumpuk lurus presisi di atas satu sama lain lagi. Klausa juga
+// eksplisit minta frame terisi penuh edge-to-edge, tidak ada bagian
+// kosong atau garment yang kepotong (permintaan "efisien, tidak ada yang
+// terpotong/kosong").
 export type ColorLineupStyle = "hanger" | "fanned" | "folded" | "flatlay" | "vertical";
 
 export interface ColorLineupGenerateInput {
@@ -107,7 +120,11 @@ function buildPrompt(input: ColorLineupGenerateInput): string {
     // (sama-sama potret) lewat fitur "Kolase 2 Foto". REVISI (lihat catatan
     // di atas, referensi admin): gaya terlipat ditumpuk vertikal (konsep
     // sama spt "folded", tapi ditumpuk ke bawah bukan berjejer ke samping).
-    vertical: `Fold each of the ${count} garments neatly into a compact rectangular stack (as if freshly folded for a boutique display), then stack all ${count} folded stacks directly on top of one another in a single vertical pile from top to bottom, each stack offset forward just enough that the folded front edge and fabric print of every layer beneath remains clearly visible (like a neat pile of folded sweaters on a shelf) — garments must NOT be arranged side by side. Photograph from a gentle elevated three-quarter angle looking down into the pile, on a soft plush neutral surface (e.g. a light-colored fur rug or folded textile) beneath, so the top surface and folded front edge of each layer legibly show its fabric print, texture, and color — not just a flat colored rectangle. Keep every fold tidy and rectangular, not messy or crumpled, with a small visible gap/offset between each layer so none are fully hidden. This is a TALL, PORTRAIT-oriented composition (taller than it is wide), not a wide horizontal row.`,
+    // REVISI #2: angle kamera top-down murni (bird's-eye), bukan tiga
+    // perempat lagi — susunan tumpukan jadi "shingled" (saling tumpang
+    // tindih dikit) supaya tiap lapis tetap kelihatan dari sudut lurus itu,
+    // dan frame diminta terisi penuh (tidak ada bagian kosong/terpotong).
+    vertical: `Fold each of the ${count} garments neatly into a compact rectangular stack (as if freshly folded for a boutique display), then arrange all ${count} folded stacks in a single vertical column from top to bottom, each stack overlapping/shingled over the one directly below it — like a staggered stack of folded sweaters, or roofing shingles, seen from above — so a clear strip of every stack's top surface remains visible between its own leading edge and the stack above it. No stack may be fully hidden, and garments must NOT be arranged side by side.\n\nCAMERA ANGLE (critical): photograph from directly overhead, straight down (a true top-down bird's-eye angle, camera pointing straight at the pile) — NOT an angled, elevated, or three-quarter view. This top-down angle must still clearly show each stack's full top surface (fabric print, texture, color), not just a thin sliver.\n\nFRAMING (critical): fill the entire tall portrait frame edge-to-edge with the stacked column of garments — no empty background space showing at the top, bottom, or sides, and no garment or stack cropped/cut off by the frame edge. Size and space the stacks so the whole column fits efficiently within frame with nothing wasted and nothing missing.\n\nKeep every fold tidy and rectangular, not messy or crumpled. This is a TALL, PORTRAIT-oriented composition (taller than it is wide), not a wide horizontal row.`,
   };
   const styleClause = STYLE_CLAUSES[style];
 

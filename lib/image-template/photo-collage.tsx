@@ -11,6 +11,12 @@
 // "+ Kolase 2 Foto") — jadi kedua panel diberi porsi SAMA (50/50), tidak
 // ada asumsi salah satu foto harus full-body/potret.
 //
+// REVISI (November 2026, segera setelah rilis — admin: "bagian kolasenya
+// juga full aja / gap minim, sekarang terlalu banyak space, jadi bisa
+// maksimalin fotonya"): margin atas/bawah/samping yang tadinya 56-64px
+// DIHAPUS total — tiap panel sekarang full-bleed sampai ke tepi kanvas,
+// cuma sisa celah 6px antar 2 panel biar tetap kebedain.
+//
 // Server-only (next/og ImageResponse) — jangan diimpor dari komponen client.
 import { ImageResponse } from "next/og";
 import { loadFonts } from "./assets";
@@ -28,18 +34,17 @@ export interface RenderPhotoCollageInput {
 export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageInput) {
   const fonts = await loadFonts();
 
-  const topMargin = 56;
-  const panelBottom = 64;
-  const sideMargin = 56;
-  const gapBetween = 14;
-  const panelHeight = HEIGHT - topMargin - panelBottom;
-  const panelWidth = (WIDTH - sideMargin * 2 - gapBetween) / 2;
+  // Admin: "bagian kolasenya juga full aja / gap minim, sekarang terlalu
+  // banyak space, jadi bisa maksimalin fotonya" — margin dihapus total,
+  // cuma sisa celah tipis antar panel (bukan 0, biar 2 foto tetap
+  // kebedain, tidak nyatu jadi 1).
+  const gapBetween = 6;
+  const panelHeight = HEIGHT;
+  const panelWidth = (WIDTH - gapBetween) / 2;
 
   const panelStyle = {
     display: "flex",
     overflow: "hidden",
-    borderRadius: 4,
-    boxShadow: "0 18px 40px -12px rgba(31,42,28,0.35)",
     backgroundColor: "#FFFFFF",
   } as const;
 
@@ -61,7 +66,6 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
           flexDirection: "row",
           alignItems: "flex-start",
           gap: gapBetween,
-          marginTop: topMargin,
         }}
       >
         <div style={{ ...panelStyle, width: panelWidth, height: panelHeight }}>
