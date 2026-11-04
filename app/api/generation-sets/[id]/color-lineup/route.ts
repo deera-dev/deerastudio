@@ -70,7 +70,7 @@ import { errorMessage } from "@/lib/api-error";
 export const maxDuration = 300;
 
 const requestSchema = z.object({
-  style: z.enum(["hanger", "fanned", "folded", "flatlay"]).optional().default("hanger"),
+  style: z.enum(["hanger", "fanned", "folded", "flatlay", "vertical"]).optional().default("hanger"),
   styleNote: z.string().trim().max(300).optional(),
 });
 
@@ -141,6 +141,7 @@ export async function POST(
       heroImageUrl: generated.imageUrl,
       productKode: set.product_kode,
       colorLabels: references.map((r) => r.label),
+      vertical: style === "vertical",
     });
     const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
     const thumbUrl = await makeThumbnailUrl(buffer, "generated-collages");

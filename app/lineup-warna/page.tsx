@@ -134,6 +134,16 @@ const STYLE_OPTIONS: { value: ColorLineupStyle; title: string; desc: string }[] 
     title: "Flat Lay Atas",
     desc: "Semua warna dibentangkan rata, difoto dari atas, berjejer dengan jarak sama.",
   },
+  // November 2026 — admin: "saya juga mau ada pilihan ketika generate seri
+  // warna, seri warna horizontal seperti yang sekarang, dan yang baru seri
+  // warna vertical biar bisa di collase nanti dengan foto tampak depan".
+  // Satu-satunya gaya POTRET (4 gaya lain di atas tetap horizontal) —
+  // lihat lib/prompts/color-lineup-generate.ts.
+  {
+    value: "vertical",
+    title: "Vertical",
+    desc: "Semua warna digantung menurun 1 kolom dari atas ke bawah — potret, cocok dikolase dengan foto tampak depan.",
+  },
 ];
 
 const MAX_TOTAL_COLORS = 7; // lihat batas di color-lineup/route.ts

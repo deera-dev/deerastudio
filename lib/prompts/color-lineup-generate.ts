@@ -40,7 +40,20 @@ export interface ColorLineupReference {
 // dipilih "flatlay" (top-down flat-lay, gaya e-commerce premium yang umum
 // & mudah dicapai AI, beda secara visual dari 3 gaya lain: hanger=vertikal
 // digantung, fanned=berdiri tumpang tindih, folded=ditumpuk terlipat).
-export type ColorLineupStyle = "hanger" | "fanned" | "folded" | "flatlay";
+//
+// REVISI (November 2026 — admin: "saya juga mau ada pilihan ketika
+// generate seri warna, seri warna horizontal seperti yang sekarang, dan
+// yang baru seri warna vertical biar bisa di collase nanti dengan foto
+// tampak depan"): ditambah "vertical" — 1 gaya baru, orientasi POTRET
+// (aspect_ratio "3:4", sama spt foto utama/angle — lihat
+// runColorLineupGenerate di bawah), garment disusun menurun 1 kolom dari
+// atas ke bawah alih-alih berjejer ke samping. 4 gaya lain (hanger/fanned/
+// folded/flatlay) TETAP horizontal seperti sebelumnya, tidak diubah — admin
+// cuma minta 1 opsi vertical tambahan, bukan versi vertical dari semuanya.
+// Dipasangkan dgn foto tampak depan (potret, aspect sama) lewat fitur
+// "Kolase 2 Foto" (app/history/page.tsx, lib/image-template/
+// photo-collage.tsx).
+export type ColorLineupStyle = "hanger" | "fanned" | "folded" | "flatlay" | "vertical";
 
 export interface ColorLineupGenerateInput {
   references: ColorLineupReference[]; // 2-7 foto, urutan = urutan tampil di scene (kiri ke kanan)
@@ -78,6 +91,12 @@ function buildPrompt(input: ColorLineupGenerateInput): string {
     // sengaja dipilih beda arah dari 3 gaya lain (semua garment terbentang
     // rata, bukan digantung/berdiri/dilipat).
     flatlay: `Lay each of the ${count} garments fully flat and fully extended (unfolded, not hanging, not standing) on a clean flat surface, arranged in a single neat horizontal row with even spacing between each garment and no overlap. Shoot from directly overhead (true top-down flat-lay angle) so each garment's complete silhouette — collar, both sleeves, and full hem — is visible in one unbroken outline, with soft natural fabric creases only, no styling folds.`,
+    // "Vertical" — satu-satunya gaya POTRET (tinggi > lebar), dibuat
+    // khusus supaya hasilnya enak dipasangkan di samping foto tampak depan
+    // (sama-sama potret) lewat fitur "Kolase 2 Foto". Garment digantung
+    // menurun 1 kolom dari atas ke bawah (bukan berjejer ke samping spt 4
+    // gaya lain).
+    vertical: `Arrange all ${count} garments stacked vertically in a single column from top to bottom, each hanging face-forward from its own hook mounted on a slim vertical wall-mounted rail or peg strip, evenly spaced with a clear gap between each garment and no overlap. Every garment must be fully visible from a consistent front-facing angle (collar/neckline down to hem), hanging naturally with realistic fabric weight and drape — this is a TALL, PORTRAIT-oriented composition (taller than it is wide), not a wide horizontal row.`,
   };
   const styleClause = STYLE_CLAUSES[style];
 
@@ -146,12 +165,16 @@ export async function runColorLineupGenerate(
 ): Promise<ColorLineupGenerateResult> {
   const startedAt = Date.now();
   const seed = input.seed ?? Math.floor(Math.random() * 1_000_000_000);
+  // "vertical" potret (3:4, sama spt foto utama/angle) supaya enak
+  // dipasangkan di samping foto tampak depan lewat Kolase 2 Foto — 4 gaya
+  // lain tetap persegi (1:1) spt sebelumnya.
+  const aspectRatio = input.style === "vertical" ? "3:4" : "1:1";
 
   const result = await fal.subscribe(FAL_MODELS.NANO_BANANA, {
     input: {
       prompt: buildPrompt(input),
       image_urls: input.references.map((r) => r.url),
-      aspect_ratio: "1:1",
+      aspect_ratio: aspectRatio,
       resolution: "2K",
       output_format: "png",
       seed,

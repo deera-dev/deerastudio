@@ -8,6 +8,7 @@ import {
   Clock,
   Film,
   ImageDown,
+  Images,
   Loader2,
   Plus,
   RefreshCw,
@@ -60,18 +61,36 @@ const ROLE_LABELS: Record<ImageRole, string> = {
   kolase_gabungan: "Kolase Gabungan",
   kolase_detail: "Kolase Detail",
   kolase_warna: "Lineup Warna",
+  kolase_pilihan: "Kolase Pilihan",
   detail: "Detail (lama)",
 };
 
-// Kolase (kolase_gabungan/kolase_detail/kolase_warna) adalah gambar
-// KOMPOSIT — ada logo brand/label teks nempel di atasnya via next/og
-// (kolase_warna: caption nama-nama warna di bawah foto hero AI-nya, lihat
-// lib/image-template/color-lineup.tsx). Menganimasikannya lewat Kling akan
-// bikin logo/teks itu ikut terdistorsi gerakan kamera, jadi ketiga role ini
-// SENGAJA dikecualikan dari daftar foto yang bisa dipilih utk "Video
-// Cerita Gabungan" (lihat lib/prompts/video-motion.ts utk catatan sisi
-// lain dari pengecualian yang sama).
-const VIDEO_EXCLUDED_ROLES: ImageRole[] = ["kolase_gabungan", "kolase_detail", "kolase_warna"];
+// Kolase (kolase_gabungan/kolase_detail/kolase_warna/kolase_pilihan)
+// adalah gambar KOMPOSIT — hasil tempel beberapa foto jadi 1 via next/og
+// (kolase_warna juga punya caption nama-nama warna di bawah foto hero
+// AI-nya, lihat lib/image-template/color-lineup.tsx). Menganimasikannya
+// lewat Kling akan bikin susunan/teks itu ikut terdistorsi gerakan kamera,
+// jadi keempat role ini SENGAJA dikecualikan dari daftar foto yang bisa
+// dipilih utk "Video Cerita Gabungan" (lihat lib/prompts/video-motion.ts
+// utk catatan sisi lain dari pengecualian yang sama).
+const VIDEO_EXCLUDED_ROLES: ImageRole[] = [
+  "kolase_gabungan",
+  "kolase_detail",
+  "kolase_warna",
+  "kolase_pilihan",
+];
+
+// "+ Kolase 2 Foto" (November 2026) — sumber foto yang BOLEH dipilih utk
+// digabung (lihat app/api/generation-sets/[id]/collage/route.ts). Hanya
+// kolase lain (kolase_gabungan/kolase_detail/kolase_pilihan) yang
+// dikecualikan, supaya tidak bikin kolase-dari-kolase berlapis —
+// kolase_warna (Lineup Warna) SENGAJA TETAP BOLEH dipilih, itu tepatnya
+// use-case "foto tampak depan + seri warna lengkap" yang diminta admin.
+const COLLAGE_SOURCE_EXCLUDED_ROLES: ImageRole[] = [
+  "kolase_gabungan",
+  "kolase_detail",
+  "kolase_pilihan",
+];
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("id-ID", {
@@ -119,6 +138,10 @@ export default function HistoryPage() {
   const [suggestingMotion, setSuggestingMotion] = useState(false);
   const [submittingVideo, setSubmittingVideo] = useState(false);
   const [videoNowTick, setVideoNowTick] = useState(() => Date.now()); // detak elapsed-time saat processing
+  // "+ Kolase 2 Foto" (November 2026) — maks 2 URL, urut = kiri lalu kanan
+  // (lihat app/api/generation-sets/[id]/collage/route.ts).
+  const [collageUrls, setCollageUrls] = useState<string[]>([]);
+  const [creatingCollage, setCreatingCollage] = useState(false);
 
   async function load(searchTerm: string, pageIndex: number) {
     setLoading(true);
@@ -180,6 +203,7 @@ export default function HistoryPage() {
       (g) => g.image_role === "utama" && g.status === "completed" && g.output_image_url
     );
     setComposeUrls(utamaGen ? [utamaGen.output_image_url as string] : []);
+    setCollageUrls([]);
     if (!selected) {
       setProductWarnaOptions([]);
       return;
@@ -347,6 +371,37 @@ export default function HistoryPage() {
 
   function toggleComposeUrl(url: string) {
     setComposeUrls((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]));
+  }
+
+  // "+ Kolase 2 Foto" — klik toggle, maks 2 terpilih (klik ke-3 saat sudah
+  // 2 terpilih diabaikan; admin lepas salah satu dulu kalau mau ganti).
+  function toggleCollageUrl(url: string) {
+    setCollageUrls((prev) => {
+      if (prev.includes(url)) return prev.filter((u) => u !== url);
+      if (prev.length >= 2) return prev;
+      return [...prev, url];
+    });
+  }
+
+  async function handleCreateCollage() {
+    if (!selected || collageUrls.length !== 2) return;
+    setCreatingCollage(true);
+    try {
+      const res = await fetch(`/api/generation-sets/${selected.id}/collage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leftUrl: collageUrls[0], rightUrl: collageUrls[1] }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Gagal membuat kolase");
+      toast.success("Kolase berhasil dibuat");
+      setCollageUrls([]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal membuat kolase");
+    } finally {
+      await refreshOne(selected.id);
+      setCreatingCollage(false);
+    }
   }
 
   async function handleSuggestMotion() {
@@ -890,6 +945,78 @@ export default function HistoryPage() {
                             </FieldHint>
                           </>
                         )}
+                      </div>
+                    );
+                  })()}
+
+                  {(() => {
+                    const collageSourcePhotos = selected.ai_generations.filter(
+                      (g) =>
+                        g.status === "completed" &&
+                        g.output_image_url &&
+                        !COLLAGE_SOURCE_EXCLUDED_ROLES.includes(g.image_role)
+                    );
+                    if (collageSourcePhotos.length < 2) return null;
+
+                    return (
+                      <div className="mt-4 rounded-lg border border-border bg-surface-2 p-3">
+                        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-text">
+                          <Images className="h-3.5 w-3.5 text-gold" />
+                          + Kolase 2 Foto
+                        </div>
+                        <p className="mb-3 text-xs text-text-faint">
+                          Pilih tepat 2 foto buat digabung jadi 1 gambar berdampingan — mis.
+                          tampak depan + tampak belakang, atau tampak depan + Lineup Warna, buat
+                          di-share ke langganan.
+                        </p>
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {collageSourcePhotos.map((g) => {
+                            const url = g.output_image_url as string;
+                            const order = collageUrls.indexOf(url);
+                            return (
+                              <button
+                                key={g.id}
+                                type="button"
+                                onClick={() => toggleCollageUrl(url)}
+                                title={ROLE_LABELS[g.image_role] ?? g.image_role}
+                                className={cn(
+                                  "relative h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition-colors",
+                                  order >= 0
+                                    ? "border-gold"
+                                    : "border-border-strong hover:border-border"
+                                )}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={g.output_thumb_url ?? url}
+                                  loading="lazy"
+                                  decoding="async"
+                                  alt={g.image_role}
+                                  className="h-full w-full object-cover"
+                                />
+                                {order >= 0 && (
+                                  <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gold text-[10px] font-semibold text-ink">
+                                    {order + 1}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          loading={creatingCollage}
+                          disabled={collageUrls.length !== 2}
+                          onClick={handleCreateCollage}
+                        >
+                          <Images className="h-4 w-4" />
+                          Buat Kolase
+                        </Button>
+                        <FieldHint>
+                          {collageUrls.length}/2 foto dipilih — foto pertama diklik jadi panel
+                          kiri, kedua jadi panel kanan.
+                        </FieldHint>
                       </div>
                     );
                   })()}
