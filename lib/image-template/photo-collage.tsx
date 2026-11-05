@@ -17,9 +17,18 @@
 // DIHAPUS total — tiap panel sekarang full-bleed sampai ke tepi kanvas,
 // cuma sisa celah 6px antar 2 panel biar tetap kebedain.
 //
+// REVISI (November 2026, segera setelah itu — admin kirim referensi foto
+// kolase kompetitor + 2 file SVG asset sendiri, "nah saya mau collasenya
+// jadi seperti image 2 ... saya juga sudah siapkan assetnya"): ditambah 2
+// elemen brand di atas foto — badge bundar ikon rusa hijau tua nempel di
+// sambungan tengah 2 panel (menimpa sedikit foto kiri & kanan), dan
+// wordmark "DEERA" putih transparan nempel di pojok kanan bawah. Lihat
+// loadBrandBadgeCircleDataUri/loadBrandWordmarkOverlayDataUri di assets.ts
+// utk sumber asset-nya.
+//
 // Server-only (next/og ImageResponse) — jangan diimpor dari komponen client.
 import { ImageResponse } from "next/og";
-import { loadFonts } from "./assets";
+import { loadFonts, loadBrandBadgeCircleDataUri, loadBrandWordmarkOverlayDataUri } from "./assets";
 
 const WIDTH = 1080;
 const HEIGHT = 1350; // 4:5 — konsisten dgn kolase lain di app ini (set-collage.tsx)
@@ -32,7 +41,11 @@ export interface RenderPhotoCollageInput {
 }
 
 export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageInput) {
-  const fonts = await loadFonts();
+  const [fonts, badgeUri, wordmarkUri] = await Promise.all([
+    loadFonts(),
+    loadBrandBadgeCircleDataUri(),
+    loadBrandWordmarkOverlayDataUri(),
+  ]);
 
   // Admin: "bagian kolasenya juga full aja / gap minim, sekarang terlalu
   // banyak space, jadi bisa maksimalin fotonya" — margin dihapus total,
@@ -48,14 +61,21 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
     backgroundColor: "#FFFFFF",
   } as const;
 
+  // Badge bundar: nempel pas di sambungan tengah, menimpa sedikit kedua
+  // panel (bukan cuma pas di garis celah 6px). Wordmark: pojok kanan
+  // bawah, nempel di atas panel kanan.
+  const badgeSize = 92;
+  const wordmarkWidth = 240;
+  const wordmarkHeight = Math.round((wordmarkWidth * 280) / 796);
+  const edgeMargin = 36;
+
   const jsx = (
     <div
       style={{
         width: WIDTH,
         height: HEIGHT,
         display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
+        position: "relative",
         fontFamily: "Poppins",
         backgroundColor: BACKDROP,
       }}
@@ -99,6 +119,38 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
           />
         </div>
       </div>
+
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={badgeUri}
+        alt=""
+        width={badgeSize}
+        height={badgeSize}
+        style={{
+          position: "absolute",
+          top: HEIGHT / 2 - badgeSize / 2,
+          left: WIDTH / 2 - badgeSize / 2,
+          width: badgeSize,
+          height: badgeSize,
+          borderRadius: "50%",
+          boxShadow: "0 8px 20px -6px rgba(0,0,0,0.45)",
+        }}
+      />
+
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={wordmarkUri}
+        alt=""
+        width={wordmarkWidth}
+        height={wordmarkHeight}
+        style={{
+          position: "absolute",
+          right: edgeMargin,
+          bottom: edgeMargin,
+          width: wordmarkWidth,
+          height: wordmarkHeight,
+        }}
+      />
     </div>
   );
 
