@@ -22,7 +22,8 @@
 // jadi seperti image 2 ... saya juga sudah siapkan assetnya"): ditambah 2
 // elemen brand di atas foto — badge bundar ikon rusa hijau tua nempel di
 // sambungan tengah 2 panel (menimpa sedikit foto kiri & kanan), dan
-// wordmark "DEERA" putih transparan nempel di pojok kanan bawah. Lihat
+// wordmark "DEERA" putih transparan nempel di pojok kiri bawah
+// (semula kanan bawah persis referensi, admin minta pindah ke kiri). Lihat
 // loadBrandBadgeCircleDataUri/loadBrandWordmarkOverlayDataUri di assets.ts
 // utk sumber asset-nya.
 //
@@ -145,7 +146,7 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
         height={wordmarkHeight}
         style={{
           position: "absolute",
-          right: edgeMargin,
+          left: edgeMargin,
           bottom: edgeMargin,
           width: wordmarkWidth,
           height: wordmarkHeight,
