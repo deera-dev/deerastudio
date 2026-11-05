@@ -20,8 +20,7 @@ let fontsCache: TemplateFont[] | null = null;
 let logoDataUriCache: string | null = null;
 let brandIconDataUriCache: string | null = null;
 let brandWordmarkDataUriCache: string | null = null;
-let brandBadgeCircleDataUriCache: string | null = null;
-let brandWordmarkOverlayDataUriCache: string | null = null;
+let brandTopBadgeDataUriCache: string | null = null;
 
 export async function loadFonts(): Promise<TemplateFont[]> {
   if (fontsCache) return fontsCache;
@@ -80,27 +79,26 @@ export async function loadBrandWordmarkDataUri(): Promise<string> {
   return brandWordmarkDataUriCache;
 }
 
-// Badge bundar + wordmark overlay transparan (November 2026) — admin kirim
-// referensi (foto kolase kompetitor) + 2 file SVG asset-nya sendiri
-// ("saya juga sudah siapkan assetnya") utk dipasang di Kolase 2 Foto
-// (lib/image-template/photo-collage.tsx): badge bundar ikon rusa hijau tua
-// nempel di sambungan tengah 2 foto, wordmark "DEERA" putih transparan
-// (opacity ~0.47 bawaan dari SVG asal) nempel pojok kanan bawah. BEDA dari
-// brand-icon-green/brand-wordmark-green di atas (dihapus dari kolase lain
-// per permintaan admin sebelumnya) — svg asli (bukan hasil crop dari logo
-// resmi deeraindonesia) di-rasterize ke PNG @1200dpi krn Satori/next-og di
-// app ini belum teruji andal utk <img> SVG langsung (semua asset lain di
-// folder ini juga PNG, bukan SVG).
-export async function loadBrandBadgeCircleDataUri(): Promise<string> {
-  if (brandBadgeCircleDataUriCache) return brandBadgeCircleDataUriCache;
-  const buf = await readFile(path.join(ASSET_DIR, "brand-badge-circle.png"));
-  brandBadgeCircleDataUriCache = `data:image/png;base64,${buf.toString("base64")}`;
-  return brandBadgeCircleDataUriCache;
-}
-
-export async function loadBrandWordmarkOverlayDataUri(): Promise<string> {
-  if (brandWordmarkOverlayDataUriCache) return brandWordmarkOverlayDataUriCache;
-  const buf = await readFile(path.join(ASSET_DIR, "brand-wordmark-overlay.png"));
-  brandWordmarkOverlayDataUriCache = `data:image/png;base64,${buf.toString("base64")}`;
-  return brandWordmarkOverlayDataUriCache;
+// Badge atas gabungan (November 2026) — admin kirim referensi (foto kolase
+// kompetitor) + file SVG asset-nya sendiri ("saya juga sudah siapkan
+// assetnya") utk dipasang di Kolase 2 Foto (lib/image-template/
+// photo-collage.tsx): badge melengkung hijau tua berisi ikon rusa +
+// wordmark "DEERA" jadi SATU bentuk, nempel di tepi atas-tengah foto
+// (menggantung dari atas, menimpa sedikit kedua panel).
+//
+// REVISI: versi PERTAMA (Agustus-November 2026) pakai 2 elemen terpisah —
+// badge bundar polos di tengah-tengah + wordmark transparan di pojok kanan
+// (lalu dipindah ke kiri) bawah, lihat riwayat git kalau perlu balik.
+// Admin kirim referensi baru + 1 SVG gabungan ("ubah lagi ya seperti image
+// pertama aja") menggantikan KEDUANYA dgn 1 badge tunggal ini di posisi
+// atas. BEDA dari brand-icon-green/brand-wordmark-green di atas (dihapus
+// dari kolase lain per permintaan admin sebelumnya) — svg asli (bukan
+// hasil crop dari logo resmi deeraindonesia) di-rasterize ke PNG @1200dpi
+// krn Satori/next-og di app ini belum teruji andal utk <img> SVG langsung
+// (semua asset lain di folder ini juga PNG, bukan SVG).
+export async function loadBrandTopBadgeDataUri(): Promise<string> {
+  if (brandTopBadgeDataUriCache) return brandTopBadgeDataUriCache;
+  const buf = await readFile(path.join(ASSET_DIR, "brand-top-badge.png"));
+  brandTopBadgeDataUriCache = `data:image/png;base64,${buf.toString("base64")}`;
+  return brandTopBadgeDataUriCache;
 }
