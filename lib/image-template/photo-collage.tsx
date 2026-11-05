@@ -20,21 +20,27 @@
 // REVISI (November 2026, segera setelah itu — admin kirim referensi foto
 // kolase kompetitor + 2 file SVG asset sendiri, "nah saya mau collasenya
 // jadi seperti image 2 ... saya juga sudah siapkan assetnya"): ditambah 2
-// elemen brand di atas foto — badge bundar ikon rusa hijau tua nempel di
-// sambungan tengah 2 panel (menimpa sedikit foto kiri & kanan), dan
-// wordmark "DEERA" putih transparan nempel di pojok kiri bawah
-// (semula kanan bawah persis referensi, admin minta pindah ke kiri). Lihat
-// loadBrandBadgeCircleDataUri/loadBrandWordmarkOverlayDataUri di assets.ts
-// utk sumber asset-nya.
+// elemen brand terpisah — badge bundar ikon rusa hijau tua di sambungan
+// tengah, dan wordmark "DEERA" transparan di pojok bawah. Lalu DIGANTI
+// TOTAL (segera setelah itu, admin kirim referensi + SVG baru: "ubah lagi
+// ya seperti image pertama aja ... garis tengahnya pake background color
+// hex diatas") jadi 1 badge melengkung gabungan (ikon rusa + wordmark
+// "DEERA" jadi satu bentuk) nempel di tepi atas-tengah, menggantung
+// menimpa kedua panel — lihat loadBrandTopBadgeDataUri di assets.ts. Garis
+// celah 6px antar panel juga diganti warnanya jadi hijau tua (SEAM_COLOR,
+// sama dgn warna badge) alih-alih krem.
 //
 // Server-only (next/og ImageResponse) — jangan diimpor dari komponen client.
 import { ImageResponse } from "next/og";
-import { loadFonts, loadBrandBadgeCircleDataUri, loadBrandWordmarkOverlayDataUri } from "./assets";
+import { loadFonts, loadBrandTopBadgeDataUri } from "./assets";
 
 const WIDTH = 1080;
 const HEIGHT = 1350; // 4:5 — konsisten dgn kolase lain di app ini (set-collage.tsx)
 
-const BACKDROP = "#F7F2E9"; // krem hangat — sama dgn set-collage.tsx & color-lineup.tsx
+// Hijau tua — warna badge atas (brand-top-badge.png, #2E412D persis dari
+// SVG asal yang dikirim admin), dipakai juga sbg warna garis celah tengah
+// antar 2 panel foto ("garis tengahnya pake background color hex diatas").
+const SEAM_COLOR = "#2E412D";
 
 export interface RenderPhotoCollageInput {
   leftUrl: string;
@@ -42,11 +48,7 @@ export interface RenderPhotoCollageInput {
 }
 
 export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageInput) {
-  const [fonts, badgeUri, wordmarkUri] = await Promise.all([
-    loadFonts(),
-    loadBrandBadgeCircleDataUri(),
-    loadBrandWordmarkOverlayDataUri(),
-  ]);
+  const [fonts, topBadgeUri] = await Promise.all([loadFonts(), loadBrandTopBadgeDataUri()]);
 
   // Admin: "bagian kolasenya juga full aja / gap minim, sekarang terlalu
   // banyak space, jadi bisa maksimalin fotonya" — margin dihapus total,
@@ -62,13 +64,11 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
     backgroundColor: "#FFFFFF",
   } as const;
 
-  // Badge bundar: nempel pas di sambungan tengah, menimpa sedikit kedua
-  // panel (bukan cuma pas di garis celah 6px). Wordmark: pojok kanan
-  // bawah, nempel di atas panel kanan.
-  const badgeSize = 92;
-  const wordmarkWidth = 240;
-  const wordmarkHeight = Math.round((wordmarkWidth * 280) / 796);
-  const edgeMargin = 36;
+  // Badge atas: nempel rata di tepi atas (top: 0), rata tengah horizontal,
+  // menggantung menimpa sedikit kedua panel — proporsi sama dgn asset asli
+  // (242:97).
+  const topBadgeWidth = 340;
+  const topBadgeHeight = Math.round((topBadgeWidth * 97) / 242);
 
   const jsx = (
     <div
@@ -78,7 +78,7 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
         display: "flex",
         position: "relative",
         fontFamily: "Poppins",
-        backgroundColor: BACKDROP,
+        backgroundColor: SEAM_COLOR,
       }}
     >
       <div
@@ -123,33 +123,16 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
 
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={badgeUri}
+        src={topBadgeUri}
         alt=""
-        width={badgeSize}
-        height={badgeSize}
+        width={topBadgeWidth}
+        height={topBadgeHeight}
         style={{
           position: "absolute",
-          top: HEIGHT / 2 - badgeSize / 2,
-          left: WIDTH / 2 - badgeSize / 2,
-          width: badgeSize,
-          height: badgeSize,
-          borderRadius: "50%",
-          boxShadow: "0 8px 20px -6px rgba(0,0,0,0.45)",
-        }}
-      />
-
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={wordmarkUri}
-        alt=""
-        width={wordmarkWidth}
-        height={wordmarkHeight}
-        style={{
-          position: "absolute",
-          left: edgeMargin,
-          bottom: edgeMargin,
-          width: wordmarkWidth,
-          height: wordmarkHeight,
+          top: 0,
+          left: WIDTH / 2 - topBadgeWidth / 2,
+          width: topBadgeWidth,
+          height: topBadgeHeight,
         }}
       />
     </div>
