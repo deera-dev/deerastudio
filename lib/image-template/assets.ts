@@ -20,6 +20,8 @@ let fontsCache: TemplateFont[] | null = null;
 let logoDataUriCache: string | null = null;
 let brandIconDataUriCache: string | null = null;
 let brandWordmarkDataUriCache: string | null = null;
+let brandBadgeCircleDataUriCache: string | null = null;
+let brandWordmarkOverlayDataUriCache: string | null = null;
 
 export async function loadFonts(): Promise<TemplateFont[]> {
   if (fontsCache) return fontsCache;
@@ -76,4 +78,29 @@ export async function loadBrandWordmarkDataUri(): Promise<string> {
   const buf = await readFile(path.join(ASSET_DIR, "brand-wordmark-green.png"));
   brandWordmarkDataUriCache = `data:image/png;base64,${buf.toString("base64")}`;
   return brandWordmarkDataUriCache;
+}
+
+// Badge bundar + wordmark overlay transparan (November 2026) — admin kirim
+// referensi (foto kolase kompetitor) + 2 file SVG asset-nya sendiri
+// ("saya juga sudah siapkan assetnya") utk dipasang di Kolase 2 Foto
+// (lib/image-template/photo-collage.tsx): badge bundar ikon rusa hijau tua
+// nempel di sambungan tengah 2 foto, wordmark "DEERA" putih transparan
+// (opacity ~0.47 bawaan dari SVG asal) nempel pojok kanan bawah. BEDA dari
+// brand-icon-green/brand-wordmark-green di atas (dihapus dari kolase lain
+// per permintaan admin sebelumnya) — svg asli (bukan hasil crop dari logo
+// resmi deeraindonesia) di-rasterize ke PNG @1200dpi krn Satori/next-og di
+// app ini belum teruji andal utk <img> SVG langsung (semua asset lain di
+// folder ini juga PNG, bukan SVG).
+export async function loadBrandBadgeCircleDataUri(): Promise<string> {
+  if (brandBadgeCircleDataUriCache) return brandBadgeCircleDataUriCache;
+  const buf = await readFile(path.join(ASSET_DIR, "brand-badge-circle.png"));
+  brandBadgeCircleDataUriCache = `data:image/png;base64,${buf.toString("base64")}`;
+  return brandBadgeCircleDataUriCache;
+}
+
+export async function loadBrandWordmarkOverlayDataUri(): Promise<string> {
+  if (brandWordmarkOverlayDataUriCache) return brandWordmarkOverlayDataUriCache;
+  const buf = await readFile(path.join(ASSET_DIR, "brand-wordmark-overlay.png"));
+  brandWordmarkOverlayDataUriCache = `data:image/png;base64,${buf.toString("base64")}`;
+  return brandWordmarkOverlayDataUriCache;
 }
