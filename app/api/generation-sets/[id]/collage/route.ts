@@ -26,6 +26,9 @@ import { errorMessage, zodErrorMessage } from "@/lib/api-error";
 const requestSchema = z.object({
   leftUrl: z.string().url(),
   rightUrl: z.string().url(),
+  kode: z.string().trim().min(1).optional(),
+  size: z.string().trim().min(1).optional(),
+  showInfo: z.boolean().optional(),
 });
 
 export async function POST(
@@ -52,6 +55,9 @@ export async function POST(
     const buffer = await renderPhotoCollagePng({
       leftUrl: body.data.leftUrl,
       rightUrl: body.data.rightUrl,
+      kode: body.data.kode,
+      size: body.data.size,
+      showInfo: body.data.showInfo,
     });
     const url = await uploadBufferToStorage(buffer, "generated-collages", "image/png");
     const thumbUrl = await makeThumbnailUrl(buffer, "generated-collages");

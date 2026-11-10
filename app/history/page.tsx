@@ -142,6 +142,11 @@ export default function HistoryPage() {
   // (lihat app/api/generation-sets/[id]/collage/route.ts).
   const [collageUrls, setCollageUrls] = useState<string[]>([]);
   const [creatingCollage, setCreatingCollage] = useState(false);
+  // Info kode+ukuran di bar bawah kolase (REVISI November 2026) — default
+  // tercentang (opt-out). Size diketik manual krn app ini tidak punya
+  // konsep ukuran garmen di data manapun.
+  const [collageShowInfo, setCollageShowInfo] = useState(true);
+  const [collageSize, setCollageSize] = useState("");
 
   async function load(searchTerm: string, pageIndex: number) {
     setLoading(true);
@@ -390,12 +395,19 @@ export default function HistoryPage() {
       const res = await fetch(`/api/generation-sets/${selected.id}/collage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leftUrl: collageUrls[0], rightUrl: collageUrls[1] }),
+        body: JSON.stringify({
+          leftUrl: collageUrls[0],
+          rightUrl: collageUrls[1],
+          kode: selected.product_kode,
+          size: collageSize.trim() || undefined,
+          showInfo: collageShowInfo,
+        }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Gagal membuat kolase");
       toast.success("Kolase berhasil dibuat");
       setCollageUrls([]);
+      setCollageSize("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal membuat kolase");
     } finally {
@@ -1003,6 +1015,44 @@ export default function HistoryPage() {
                             );
                           })}
                         </div>
+
+                        <div className="mb-3 rounded-lg border border-border bg-surface px-3 py-2.5">
+                          <label className="flex cursor-pointer items-start gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={collageShowInfo}
+                              onChange={(e) => setCollageShowInfo(e.target.checked)}
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-transparent accent-gold"
+                            />
+                            <span>
+                              <span className="text-sm font-medium text-text">
+                                Tampilkan kode &amp; ukuran
+                              </span>
+                              <span className="mt-0.5 block text-xs text-text-faint">
+                                Bar hijau berisi kode produk ({selected.product_kode}) + ukuran di
+                                bagian bawah kolase.
+                              </span>
+                            </span>
+                          </label>
+                          {collageShowInfo && (
+                            <div className="mt-2.5 pl-6">
+                              <Label htmlFor="collage-size">Ukuran (opsional)</Label>
+                              <Select
+                                id="collage-size"
+                                value={collageSize}
+                                onChange={(e) => setCollageSize(e.target.value)}
+                                className="max-w-[200px]"
+                              >
+                                <option value="">Tanpa ukuran</option>
+                                <option value="Midi">Midi</option>
+                                <option value="Midi Jumbo">Midi Jumbo</option>
+                                <option value="Gamis">Gamis</option>
+                                <option value="Gamis Jumbo">Gamis Jumbo</option>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+
                         <Button
                           type="button"
                           size="sm"

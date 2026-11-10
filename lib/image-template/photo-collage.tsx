@@ -30,6 +30,15 @@
 // celah 6px antar panel juga diganti warnanya jadi hijau tua (SEAM_COLOR,
 // sama dgn warna badge) alih-alih krem.
 //
+// REVISI (November 2026 — admin kirim referensi foto produk resmi, "tambahkan
+// info ukuran dan kode produk dibawahnya seperti gambar ... tapi ada pilihan
+// dengan default yes, pilihan untuk munculin kode dan size"): ditambah bar
+// hijau tua (SEAM_COLOR juga) di tepi bawah berisi ukuran + kode produk,
+// nempel menimpa bawah kedua panel (pola sama dgn topBadge). kode/size
+// diketik manual di form "+ Kolase 2 Foto" (app/history/page.tsx) — app ini
+// tidak punya konsep ukuran garmen sama sekali di data manapun. showInfo
+// default true (opt-out via checkbox di form, bukan opt-in).
+//
 // Server-only (next/og ImageResponse) — jangan diimpor dari komponen client.
 import { ImageResponse } from "next/og";
 import { loadFonts, loadBrandTopBadgeDataUri } from "./assets";
@@ -45,6 +54,17 @@ const SEAM_COLOR = "#2E412D";
 export interface RenderPhotoCollageInput {
   leftUrl: string;
   rightUrl: string;
+  // Kode produk + ukuran (November 2026, admin: "tambahkan info ukuran dan
+  // kode produk dibawahnya ... tapi ada pilihan dengan default yes, pilihan
+  // untuk munculin kode dan size") — admin TIDAK isi size manual di mana
+  // pun sebelumnya (app ini tidak punya konsep ukuran garmen sama sekali,
+  // beda dari deeraindonesia/products.variants), jadi diketik langsung di
+  // form "+ Kolase 2 Foto" (lihat app/history/page.tsx) tiap kali bikin
+  // kolase. showInfo default true kalau tidak diisi (opt-out, bukan
+  // opt-in) — checkbox di form default tercentang.
+  kode?: string;
+  size?: string;
+  showInfo?: boolean;
 }
 
 export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageInput) {
@@ -69,6 +89,8 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
   // (242:97).
   const topBadgeWidth = 340;
   const topBadgeHeight = Math.round((topBadgeWidth * 97) / 242);
+
+  const showInfo = input.showInfo !== false && Boolean(input.kode || input.size);
 
   const jsx = (
     <div
@@ -135,6 +157,55 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
           height: topBadgeHeight,
         }}
       />
+
+      {showInfo && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            width: WIDTH,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            paddingTop: 22,
+            paddingBottom: 28,
+            backgroundColor: SEAM_COLOR,
+          }}
+        >
+          {input.size && (
+            <span
+              style={{
+                display: "flex",
+                fontFamily: "Poppins",
+                fontWeight: 600,
+                fontSize: 26,
+                letterSpacing: 3,
+                textTransform: "uppercase",
+                color: "#FFFFFF",
+              }}
+            >
+              {input.size}
+            </span>
+          )}
+          {input.kode && (
+            <span
+              style={{
+                display: "flex",
+                marginTop: input.size ? 6 : 0,
+                fontFamily: "Poppins",
+                fontWeight: 700,
+                fontSize: 38,
+                letterSpacing: 2,
+                color: "#FFFFFF",
+              }}
+            >
+              {input.kode}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 
