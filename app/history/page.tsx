@@ -143,10 +143,12 @@ export default function HistoryPage() {
   const [collageUrls, setCollageUrls] = useState<string[]>([]);
   const [creatingCollage, setCreatingCollage] = useState(false);
   // Info kode+ukuran di bar bawah kolase (REVISI November 2026) — default
-  // tercentang (opt-out). Size diketik manual krn app ini tidak punya
-  // konsep ukuran garmen di data manapun.
+  // tercentang (opt-out). Ukuran TIDAK diketik manual (admin: "ukurannya
+  // kok milih? kan udah ada datanya") — diambil dari products.variants
+  // (sama dgn effect productWarnaOptions di bawah, query digabung jadi
+  // satu).
   const [collageShowInfo, setCollageShowInfo] = useState(true);
-  const [collageSize, setCollageSize] = useState("");
+  const [productSizes, setProductSizes] = useState<string[]>([]);
 
   async function load(searchTerm: string, pageIndex: number) {
     setLoading(true);
@@ -211,6 +213,7 @@ export default function HistoryPage() {
     setCollageUrls([]);
     if (!selected) {
       setProductWarnaOptions([]);
+      setProductSizes([]);
       return;
     }
     let cancelled = false;
@@ -218,10 +221,13 @@ export default function HistoryPage() {
       const supabase = createClient();
       const { data } = await supabase
         .from("products")
-        .select("warna")
+        .select("warna, variants")
         .eq("kode", selected.product_kode)
         .single();
-      if (!cancelled) setProductWarnaOptions((data?.warna as string[] | null) ?? []);
+      if (cancelled) return;
+      setProductWarnaOptions((data?.warna as string[] | null) ?? []);
+      const variants = (data?.variants as { size: string }[] | null) ?? [];
+      setProductSizes([...new Set(variants.map((v) => v.size).filter(Boolean))]);
     })();
     return () => {
       cancelled = true;
@@ -399,7 +405,7 @@ export default function HistoryPage() {
           leftUrl: collageUrls[0],
           rightUrl: collageUrls[1],
           kode: selected.product_kode,
-          size: collageSize.trim() || undefined,
+          size: productSizes.join(" / ") || undefined,
           showInfo: collageShowInfo,
         }),
       });
@@ -407,7 +413,6 @@ export default function HistoryPage() {
       if (!res.ok) throw new Error(data?.error || "Gagal membuat kolase");
       toast.success("Kolase berhasil dibuat");
       setCollageUrls([]);
-      setCollageSize("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal membuat kolase");
     } finally {
@@ -1029,28 +1034,14 @@ export default function HistoryPage() {
                                 Tampilkan kode &amp; ukuran
                               </span>
                               <span className="mt-0.5 block text-xs text-text-faint">
-                                Bar hijau berisi kode produk ({selected.product_kode}) + ukuran di
-                                bagian bawah kolase.
+                                Bar hijau berisi kode produk ({selected.product_kode})
+                                {productSizes.length > 0
+                                  ? ` + ukuran (${productSizes.join(" / ")})`
+                                  : " — produk ini belum ada data ukuran di katalog"}{" "}
+                                di bagian bawah kolase.
                               </span>
                             </span>
                           </label>
-                          {collageShowInfo && (
-                            <div className="mt-2.5 pl-6">
-                              <Label htmlFor="collage-size">Ukuran (opsional)</Label>
-                              <Select
-                                id="collage-size"
-                                value={collageSize}
-                                onChange={(e) => setCollageSize(e.target.value)}
-                                className="max-w-[200px]"
-                              >
-                                <option value="">Tanpa ukuran</option>
-                                <option value="Midi">Midi</option>
-                                <option value="Midi Jumbo">Midi Jumbo</option>
-                                <option value="Gamis">Gamis</option>
-                                <option value="Gamis Jumbo">Gamis Jumbo</option>
-                              </Select>
-                            </div>
-                          )}
                         </div>
 
                         <Button

@@ -34,10 +34,10 @@
 // info ukuran dan kode produk dibawahnya seperti gambar ... tapi ada pilihan
 // dengan default yes, pilihan untuk munculin kode dan size"): ditambah bar
 // hijau tua (SEAM_COLOR juga) berisi ukuran + kode produk di bawah kedua
-// panel (lihat REVISI berikutnya di bawah soal nempel vs tidak). kode/size
-// diketik manual di form "+ Kolase 2 Foto" (app/history/page.tsx) — app ini
-// tidak punya konsep ukuran garmen sama sekali di data manapun. showInfo
-// default true (opt-out via checkbox di form, bukan opt-in).
+// panel (lihat REVISI berikutnya di bawah soal nempel vs tidak). showInfo
+// default true (opt-out via checkbox di form, bukan opt-in). size SEMPAT
+// diketik manual di form — DIBATALKAN (lihat REVISI terakhir di bawah),
+// sekarang diambil otomatis dari products.variants.
 //
 // REVISI (November 2026, segera setelah itu — admin: "kalau info kode dan
 // size dibawah full hijau gitu, dia tertutup detailnya ... [bar-nya] tidak
@@ -49,6 +49,14 @@
 // objectPosition foto dikembalikan ke "top center" (sempat diganti "center"
 // di revisi sebelumnya krn salah paham — itu bukan yang dimaksud admin,
 // lihat riwayat chat: "garis tengah maksud saya, bukan tengah crop foto").
+//
+// REVISI (November 2026, segera setelah itu — admin: "ukurannya kok milih?
+// kan udah ada datanya, saya cuma mau opsi mau ditampilkan atau ngga aja"):
+// pilihan ukuran manual (dropdown Midi/Midi Jumbo/dst di form) DIHAPUS —
+// `size` sekarang diisi app/history/page.tsx dari products.variants (join
+// semua size yang ada dgn " / ", biasanya cuma 1), bukan ketik/pilih manual.
+// Checkbox di form cuma nentuin tampil/tidak (showInfo), bukan lagi isi
+// datanya.
 //
 // Server-only (next/og ImageResponse) — jangan diimpor dari komponen client.
 import { ImageResponse } from "next/og";
@@ -65,14 +73,11 @@ const SEAM_COLOR = "#2E412D";
 export interface RenderPhotoCollageInput {
   leftUrl: string;
   rightUrl: string;
-  // Kode produk + ukuran (November 2026, admin: "tambahkan info ukuran dan
-  // kode produk dibawahnya ... tapi ada pilihan dengan default yes, pilihan
-  // untuk munculin kode dan size") — admin TIDAK isi size manual di mana
-  // pun sebelumnya (app ini tidak punya konsep ukuran garmen sama sekali,
-  // beda dari deeraindonesia/products.variants), jadi diketik langsung di
-  // form "+ Kolase 2 Foto" (lihat app/history/page.tsx) tiap kali bikin
-  // kolase. showInfo default true kalau tidak diisi (opt-out, bukan
-  // opt-in) — checkbox di form default tercentang.
+  // Kode produk + ukuran (November 2026) — size diisi app/history/page.tsx
+  // dari products.variants (kode yang sama, Supabase project yang sama dgn
+  // deeraindonesia), BUKAN diketik/dipilih manual. showInfo default true
+  // kalau tidak diisi (opt-out, bukan opt-in) — checkbox di form cuma
+  // nentuin tampil/tidak.
   kode?: string;
   size?: string;
   showInfo?: boolean;
