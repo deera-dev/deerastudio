@@ -33,18 +33,22 @@
 // REVISI (November 2026 — admin kirim referensi foto produk resmi, "tambahkan
 // info ukuran dan kode produk dibawahnya seperti gambar ... tapi ada pilihan
 // dengan default yes, pilihan untuk munculin kode dan size"): ditambah bar
-// hijau tua (SEAM_COLOR juga) di tepi bawah berisi ukuran + kode produk,
-// nempel menimpa bawah kedua panel (pola sama dgn topBadge). kode/size
+// hijau tua (SEAM_COLOR juga) berisi ukuran + kode produk di bawah kedua
+// panel (lihat REVISI berikutnya di bawah soal nempel vs tidak). kode/size
 // diketik manual di form "+ Kolase 2 Foto" (app/history/page.tsx) — app ini
 // tidak punya konsep ukuran garmen sama sekali di data manapun. showInfo
 // default true (opt-out via checkbox di form, bukan opt-in).
 //
-// REVISI (November 2026, segera setelah itu — admin: "terpotong detail
-// bagian bawahnya kalau seperti itu, enaknya main di tengah2 aja"): crop foto
-// (objectPosition) diganti dari "top center" ke "center" — sebelumnya
-// top-anchored bikin bagian bawah foto (rok/sepatu) makin kepotong krn sudah
-// dicrop dari atas DAN ketutup bar bawah yang baru; center-crop menyeimbangkan
-// kerugian di atas (ketutup topBadge) & bawah (ketutup bar info) sekaligus.
+// REVISI (November 2026, segera setelah itu — admin: "kalau info kode dan
+// size dibawah full hijau gitu, dia tertutup detailnya ... [bar-nya] tidak
+// menimpa foto sama sekali"): bar info kode+ukuran TIDAK LAGI absolute
+// menimpa bawah panel (beda dari topBadge yang tetap menimpa — itu cuma
+// nutup background dekoratif di belakang model, bukan konten penting).
+// Kanvas sekarang ditambah tinggi di bawah (INFO_BAR_HEIGHT) khusus utk bar
+// ini, panel foto tetap full HEIGHT utuh tidak kepotong/ketutup apa pun.
+// objectPosition foto dikembalikan ke "top center" (sempat diganti "center"
+// di revisi sebelumnya krn salah paham — itu bukan yang dimaksud admin,
+// lihat riwayat chat: "garis tengah maksud saya, bukan tengah crop foto").
 //
 // Server-only (next/og ImageResponse) — jangan diimpor dari komponen client.
 import { ImageResponse } from "next/og";
@@ -98,14 +102,16 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
   const topBadgeHeight = Math.round((topBadgeWidth * 97) / 242);
 
   const showInfo = input.showInfo !== false && Boolean(input.kode || input.size);
+  const infoBarHeight = 130;
+  const totalHeight = HEIGHT + (showInfo ? infoBarHeight : 0);
 
   const jsx = (
     <div
       style={{
         width: WIDTH,
-        height: HEIGHT,
+        height: totalHeight,
         display: "flex",
-        position: "relative",
+        flexDirection: "column",
         fontFamily: "Poppins",
         backgroundColor: SEAM_COLOR,
       }}
@@ -116,6 +122,7 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
           flexDirection: "row",
           alignItems: "flex-start",
           gap: gapBetween,
+          position: "relative",
         }}
       >
         <div style={{ ...panelStyle, width: panelWidth, height: panelHeight }}>
@@ -129,7 +136,7 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
               width: panelWidth,
               height: panelHeight,
               objectFit: "cover",
-              objectPosition: "center",
+              objectPosition: "top center",
             }}
           />
         </div>
@@ -144,40 +151,36 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
               width: panelWidth,
               height: panelHeight,
               objectFit: "cover",
-              objectPosition: "center",
+              objectPosition: "top center",
             }}
           />
         </div>
-      </div>
 
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={topBadgeUri}
-        alt=""
-        width={topBadgeWidth}
-        height={topBadgeHeight}
-        style={{
-          position: "absolute",
-          top: 0,
-          left: WIDTH / 2 - topBadgeWidth / 2,
-          width: topBadgeWidth,
-          height: topBadgeHeight,
-        }}
-      />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={topBadgeUri}
+          alt=""
+          width={topBadgeWidth}
+          height={topBadgeHeight}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: WIDTH / 2 - topBadgeWidth / 2,
+            width: topBadgeWidth,
+            height: topBadgeHeight,
+          }}
+        />
+      </div>
 
       {showInfo && (
         <div
           style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            width: WIDTH,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            paddingTop: 22,
-            paddingBottom: 28,
+            width: WIDTH,
+            height: infoBarHeight,
             backgroundColor: SEAM_COLOR,
           }}
         >
@@ -216,7 +219,7 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
     </div>
   );
 
-  return new ImageResponse(jsx, { width: WIDTH, height: HEIGHT, fonts });
+  return new ImageResponse(jsx, { width: WIDTH, height: totalHeight, fonts });
 }
 
 export async function renderPhotoCollagePng(input: RenderPhotoCollageInput): Promise<Buffer> {
