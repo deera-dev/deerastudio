@@ -30,6 +30,26 @@
 // celah 6px antar panel juga diganti warnanya jadi hijau tua (SEAM_COLOR,
 // sama dgn warna badge) alih-alih krem.
 //
+// REVISI (November 2026 — admin kirim referensi foto produk resmi, "tambahkan
+// info ukuran dan kode produk dibawahnya seperti gambar ... tapi ada pilihan
+// dengan default yes, pilihan untuk munculin kode dan size"): ditambah bar
+// hijau tua (SEAM_COLOR juga) berisi ukuran + kode produk di bawah kedua
+// panel (lihat REVISI berikutnya di bawah soal nempel vs tidak). kode/size
+// diketik manual di form "+ Kolase 2 Foto" (app/history/page.tsx) — app ini
+// tidak punya konsep ukuran garmen sama sekali di data manapun. showInfo
+// default true (opt-out via checkbox di form, bukan opt-in).
+//
+// REVISI (November 2026, segera setelah itu — admin: "kalau info kode dan
+// size dibawah full hijau gitu, dia tertutup detailnya ... [bar-nya] tidak
+// menimpa foto sama sekali"): bar info kode+ukuran TIDAK LAGI absolute
+// menimpa bawah panel (beda dari topBadge yang tetap menimpa — itu cuma
+// nutup background dekoratif di belakang model, bukan konten penting).
+// Kanvas sekarang ditambah tinggi di bawah (INFO_BAR_HEIGHT) khusus utk bar
+// ini, panel foto tetap full HEIGHT utuh tidak kepotong/ketutup apa pun.
+// objectPosition foto dikembalikan ke "top center" (sempat diganti "center"
+// di revisi sebelumnya krn salah paham — itu bukan yang dimaksud admin,
+// lihat riwayat chat: "garis tengah maksud saya, bukan tengah crop foto").
+//
 // Server-only (next/og ImageResponse) — jangan diimpor dari komponen client.
 import { ImageResponse } from "next/og";
 import { loadFonts, loadBrandTopBadgeDataUri } from "./assets";
@@ -45,6 +65,17 @@ const SEAM_COLOR = "#2E412D";
 export interface RenderPhotoCollageInput {
   leftUrl: string;
   rightUrl: string;
+  // Kode produk + ukuran (November 2026, admin: "tambahkan info ukuran dan
+  // kode produk dibawahnya ... tapi ada pilihan dengan default yes, pilihan
+  // untuk munculin kode dan size") — admin TIDAK isi size manual di mana
+  // pun sebelumnya (app ini tidak punya konsep ukuran garmen sama sekali,
+  // beda dari deeraindonesia/products.variants), jadi diketik langsung di
+  // form "+ Kolase 2 Foto" (lihat app/history/page.tsx) tiap kali bikin
+  // kolase. showInfo default true kalau tidak diisi (opt-out, bukan
+  // opt-in) — checkbox di form default tercentang.
+  kode?: string;
+  size?: string;
+  showInfo?: boolean;
 }
 
 export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageInput) {
@@ -70,13 +101,17 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
   const topBadgeWidth = 340;
   const topBadgeHeight = Math.round((topBadgeWidth * 97) / 242);
 
+  const showInfo = input.showInfo !== false && Boolean(input.kode || input.size);
+  const infoBarHeight = 130;
+  const totalHeight = HEIGHT + (showInfo ? infoBarHeight : 0);
+
   const jsx = (
     <div
       style={{
         width: WIDTH,
-        height: HEIGHT,
+        height: totalHeight,
         display: "flex",
-        position: "relative",
+        flexDirection: "column",
         fontFamily: "Poppins",
         backgroundColor: SEAM_COLOR,
       }}
@@ -87,6 +122,7 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
           flexDirection: "row",
           alignItems: "flex-start",
           gap: gapBetween,
+          position: "relative",
         }}
       >
         <div style={{ ...panelStyle, width: panelWidth, height: panelHeight }}>
@@ -119,26 +155,71 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
             }}
           />
         </div>
+
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={topBadgeUri}
+          alt=""
+          width={topBadgeWidth}
+          height={topBadgeHeight}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: WIDTH / 2 - topBadgeWidth / 2,
+            width: topBadgeWidth,
+            height: topBadgeHeight,
+          }}
+        />
       </div>
 
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={topBadgeUri}
-        alt=""
-        width={topBadgeWidth}
-        height={topBadgeHeight}
-        style={{
-          position: "absolute",
-          top: 0,
-          left: WIDTH / 2 - topBadgeWidth / 2,
-          width: topBadgeWidth,
-          height: topBadgeHeight,
-        }}
-      />
+      {showInfo && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            width: WIDTH,
+            height: infoBarHeight,
+            backgroundColor: SEAM_COLOR,
+          }}
+        >
+          {input.size && (
+            <span
+              style={{
+                display: "flex",
+                fontFamily: "Poppins",
+                fontWeight: 600,
+                fontSize: 26,
+                letterSpacing: 3,
+                textTransform: "uppercase",
+                color: "#FFFFFF",
+              }}
+            >
+              {input.size}
+            </span>
+          )}
+          {input.kode && (
+            <span
+              style={{
+                display: "flex",
+                marginTop: input.size ? 6 : 0,
+                fontFamily: "Poppins",
+                fontWeight: 700,
+                fontSize: 38,
+                letterSpacing: 2,
+                color: "#FFFFFF",
+              }}
+            >
+              {input.kode}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 
-  return new ImageResponse(jsx, { width: WIDTH, height: HEIGHT, fonts });
+  return new ImageResponse(jsx, { width: WIDTH, height: totalHeight, fonts });
 }
 
 export async function renderPhotoCollagePng(input: RenderPhotoCollageInput): Promise<Buffer> {
