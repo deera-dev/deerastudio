@@ -39,6 +39,13 @@
 // tidak punya konsep ukuran garmen sama sekali di data manapun. showInfo
 // default true (opt-out via checkbox di form, bukan opt-in).
 //
+// REVISI (November 2026, segera setelah itu — admin: "terpotong detail
+// bagian bawahnya kalau seperti itu, enaknya main di tengah2 aja"): crop foto
+// (objectPosition) diganti dari "top center" ke "center" — sebelumnya
+// top-anchored bikin bagian bawah foto (rok/sepatu) makin kepotong krn sudah
+// dicrop dari atas DAN ketutup bar bawah yang baru; center-crop menyeimbangkan
+// kerugian di atas (ketutup topBadge) & bawah (ketutup bar info) sekaligus.
+//
 // Server-only (next/og ImageResponse) — jangan diimpor dari komponen client.
 import { ImageResponse } from "next/og";
 import { loadFonts, loadBrandTopBadgeDataUri } from "./assets";
@@ -122,7 +129,7 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
               width: panelWidth,
               height: panelHeight,
               objectFit: "cover",
-              objectPosition: "top center",
+              objectPosition: "center",
             }}
           />
         </div>
@@ -137,7 +144,7 @@ export async function renderPhotoCollageImageResponse(input: RenderPhotoCollageI
               width: panelWidth,
               height: panelHeight,
               objectFit: "cover",
-              objectPosition: "top center",
+              objectPosition: "center",
             }}
           />
         </div>
