@@ -20,7 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { uploadPublishedImage, slugifyWarna } from "@/lib/cloudinary/client";
+import { publishGenerationSet, PublishValidationError } from "@/lib/publish/publishGenerationSet";
 
 const requestSchema = z.object({
   imageIds: z.object({
@@ -56,95 +56,13 @@ export async function POST(
     return NextResponse.json({ error: "Generation set tidak ditemukan" }, { status: 404 });
   }
 
-  const allIds = [
-    body.data.imageIds.utama,
-    ...body.data.imageIds.detail,
-    ...body.data.imageIds.seri,
-  ];
-  const { data: generations } = await supabase
-    .from("ai_generations")
-    .select("id, image_role, output_image_url, status, variant_warna")
-    .in("id", allIds);
-
-  const notReady = generations?.find((g) => g.status !== "completed");
-  if (notReady) {
-    return NextResponse.json(
-      { error: "Hanya gambar berstatus completed yang bisa dipublish" },
-      { status: 400 }
-    );
-  }
-
-  const byId = new Map(generations!.map((g) => [g.id, g]));
-
-  const utama = byId.get(body.data.imageIds.utama)!;
-  const detailUploads = await Promise.all(
-    body.data.imageIds.detail.map((genId, i) =>
-      uploadPublishedImage(byId.get(genId)!.output_image_url!, set.product_kode, `detail-${i + 1}` as const)
-    )
-  );
-  const utamaUpload = await uploadPublishedImage(utama.output_image_url!, set.product_kode, "utama");
-
-  const seriGens = body.data.imageIds.seri
-    .map((genId) => byId.get(genId)!)
-    .filter((g) => g.variant_warna); // baris seri lama tanpa variant_warna diabaikan, tidak bisa dipetakan ke warna
-
-  const seriUploads = await Promise.all(
-    seriGens.map(async (g) => {
-      const upload = await uploadPublishedImage(
-        g.output_image_url!,
-        set.product_kode,
-        `seri-${slugifyWarna(g.variant_warna!)}`
-      );
-      return { warna: g.variant_warna!, url: upload.secure_url };
-    })
-  );
-
-  // Merge ke warna_images yang sudah ada di products (bukan overwrite total)
-  // supaya publish satu-dua warna baru tidak menghapus warna lain yang sudah
-  // pernah dipublish sebelumnya.
-  let mergedWarnaImages: Record<string, { image: string }> | null = null;
-  if (seriUploads.length > 0) {
-    const { data: existingProduct } = await service
-      .from("products")
-      .select("warna_images")
-      .eq("kode", set.product_kode)
-      .single();
-    const existing = (existingProduct?.warna_images as Record<string, { image: string }> | null) ?? {};
-    mergedWarnaImages = { ...existing };
-    for (const u of seriUploads) {
-      mergedWarnaImages[u.warna] = { image: u.url };
+  try {
+    const result = await publishGenerationSet(supabase, service, id, set.product_kode, body.data.imageIds);
+    return NextResponse.json(result);
+  } catch (err) {
+    if (err instanceof PublishValidationError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
     }
+    throw err;
   }
-
-  // NOTE: ini OVERWRITE data live products.image/detail (dan merge warna_images)
-  // — sesuai PRD §15, admin harus sudah dapat konfirmasi eksplisit di UI
-  // sebelum endpoint ini dipanggil (aturan "Explicit permission required"
-  // utk data yg tampil publik).
-  const { error: updateError } = await service
-    .from("products")
-    .update({
-      image: utamaUpload.secure_url,
-      detail: detailUploads.map((u) => u.secure_url),
-      ...(mergedWarnaImages ? { warna_images: mergedWarnaImages } : {}),
-    })
-    .eq("kode", set.product_kode);
-
-  if (updateError) {
-    return NextResponse.json({ error: "Gagal update produk Deera" }, { status: 500 });
-  }
-
-  const publishedImageUrls = {
-    image: utamaUpload.secure_url,
-    detail: detailUploads.map((u) => u.secure_url),
-    ...(seriUploads.length > 0
-      ? { warna_images: Object.fromEntries(seriUploads.map((u) => [u.warna, u.url])) }
-      : {}),
-  };
-
-  await supabase
-    .from("ai_generation_sets")
-    .update({ published_at: new Date().toISOString(), published_image_urls: publishedImageUrls })
-    .eq("id", id);
-
-  return NextResponse.json({ publishedAt: new Date().toISOString(), cloudinaryUrls: publishedImageUrls });
 }

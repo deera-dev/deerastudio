@@ -280,7 +280,7 @@ export default function HistoryPage() {
         `Set ini akan pindah dari "${selected.product_kode}" ke "${targetKode}" (${targetNama}). ` +
         "Foto TIDAK digenerate ulang, hanya link kode produknya yang berubah." +
         (selected.published_at
-          ? ` Set ini sudah pernah dipublish ke katalog "${selected.product_kode}" — transfer ini TIDAK otomatis membenarkan foto yang sudah tayang di sana, publish ulang manual ke "${targetKode}" setelah pindah.`
+          ? ` Set ini sudah pernah dipublish — setelah pindah, otomatis dipublish ULANG ke katalog "${targetKode}". Katalog "${selected.product_kode}" (kode lama) TIDAK otomatis dibersihkan/dikembalikan — cek manual kalau perlu.`
           : ""),
       confirmLabel: "Ya, pindahkan",
       danger: true,
@@ -296,7 +296,14 @@ export default function HistoryPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Gagal memindahkan produk");
-      toast.success(`Set berhasil dipindah ke "${targetKode}"`);
+      if (data.republished) {
+        toast.success(`Set berhasil dipindah & dipublish ulang ke "${targetKode}"`);
+      } else {
+        toast.success(`Set berhasil dipindah ke "${targetKode}"`);
+        if (data.republishSkippedReason) {
+          toast.error(data.republishSkippedReason);
+        }
+      }
       setTransferOpen(false);
       setTransferQuery("");
       setTransferResults([]);
