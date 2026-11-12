@@ -38,7 +38,13 @@ export default function LoginPage() {
     setError(null);
     const supabase = createClient();
     const email = `${username.trim()}@${EMAIL_DOMAIN}`;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // BUG FIX (November 2026) — sama dgn fix di deeraindonesia: keyboard
+    // mobile kadang kapital-in huruf pertama/setelah spasi walau
+    // autoCapitalize="none" sudah dipasang di field-nya. Semua password
+    // akun Deera memang selalu lowercase, jadi dipaksa lowercase di sini
+    // juga (akun sama persis dgn admin.deera.id, lihat EMAIL_DOMAIN) —
+    // apa pun yang sebenarnya ditik/dikapitalkan keyboard, tetap benar.
+    const { error } = await supabase.auth.signInWithPassword({ email, password: password.toLowerCase() });
     setLoading(false);
     if (error) {
       setError(error.message);
