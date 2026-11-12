@@ -187,11 +187,26 @@ export default function LineupWarnaPage() {
   const [generating, setGenerating] = useState(false);
   // Form "+ Tambah Warna" — pilih dari products.warna produk ini (sama
   // spt dropdown "Tambah Warna Seri" di History), supaya nama warna
-  // konsisten & tidak typo. Foto-nya WAJIB diupload manual (flat-lay ASLI).
+  // konsisten & tidak typo.
   const [productWarnaOptions, setProductWarnaOptions] = useState<string[]>([]);
   const [newColorWarna, setNewColorWarna] = useState("");
   const [newColorImage, setNewColorImage] = useState<string | null>(null);
+  const [newColorImageIsReused, setNewColorImageIsReused] = useState(false);
   const [savingColor, setSavingColor] = useState(false);
+  // REVISI (November 2026, admin: "harusnya dari masternya sudah pernah ada
+  // foto flat laynya dong, kok harus diupload ulang lagi ya?") — sebelum
+  // ini, "+ Tambah Warna" SELALU minta upload baru meski warna itu
+  // sebenarnya sudah punya foto tersimpan di tempat lain: foto flat-lay
+  // warna utama set ini (set.product_images, utk product_warna), foto
+  // full-body warna lain yang sudah pernah di-generate sbg "seri" (History
+  // -> Tambah Warna Seri, ai_generations.variant_product_images), atau foto
+  // AI yang sudah dipublish ke katalog per warna (products.warna_images).
+  // Sekarang kalau warna yang dipilih admin cocok salah satu sumber itu,
+  // foto-nya otomatis terisi (masih bisa diganti manual kalau salah/buram —
+  // sama persis seperti mengganti foto tile yang sudah ada).
+  const [existingColorPhotos, setExistingColorPhotos] = useState<Record<string, { url: string; source: string }>>(
+    {}
+  );
 
   // Picker gabungan DUA sumber (lihat REVISI v4 di header) — baris
   // ai_generation_sets yang sudah ada (foto AI Studio) + SEMUA produk dari
@@ -249,25 +264,76 @@ export default function LineupWarnaPage() {
   const lineupGen = selectedSet?.ai_generations.find((g) => g.image_role === "kolase_warna") ?? null;
 
   // Pilihan warna yang tersisa utk "+ Tambah Warna" — warna produk ini yang
-  // belum ada di lineup_color_refs.
+  // belum ada di lineup_color_refs. Sekalian siapkan existingColorPhotos
+  // (lihat REVISI di atas) — gabungan foto flat-lay warna utama set ini
+  // (product_images, utk product_warna) + foto "seri" yang sudah pernah
+  // digenerate (variant_product_images, prioritas tertinggi krn ASLI utk
+  // warna spesifik itu) + foto katalog yang sudah dipublish per warna
+  // (products.warna_images, prioritas terendah krn itu hasil AI, bukan
+  // flat-lay asli — cuma fallback kalau tidak ada sumber lain).
   useEffect(() => {
     setNewColorWarna("");
     setNewColorImage(null);
+    setNewColorImageIsReused(false);
     if (!productKode) {
       setProductWarnaOptions([]);
+      setExistingColorPhotos({});
       return;
     }
     let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const { data } = await supabase.from("products").select("warna").eq("kode", productKode).single();
-      if (!cancelled) setProductWarnaOptions((data?.warna as string[] | null) ?? []);
+      const { data } = await supabase
+        .from("products")
+        .select("warna, warna_images")
+        .eq("kode", productKode)
+        .single();
+      if (cancelled) return;
+      setProductWarnaOptions((data?.warna as string[] | null) ?? []);
+
+      const photos: Record<string, { url: string; source: string }> = {};
+      const warnaImages = (data?.warna_images as Record<string, { image: string }> | null) ?? {};
+      for (const [warna, entry] of Object.entries(warnaImages)) {
+        if (entry?.image) photos[warna] = { url: entry.image, source: "sudah dipublish ke katalog" };
+      }
+      for (const g of selectedSet?.ai_generations ?? []) {
+        const img = (g.variant_product_images as Record<string, string> | null)?.image;
+        if (g.image_role === "seri" && g.variant_warna && img) {
+          photos[g.variant_warna] = { url: img, source: "foto seri yang sudah pernah digenerate" };
+        }
+      }
+      const utamaWarna = selectedSet?.product_warna;
+      const utamaFlatlay = selectedSet?.product_images?.front ?? selectedSet?.product_images?.fullBody;
+      if (utamaWarna && utamaFlatlay) {
+        photos[utamaWarna] = { url: utamaFlatlay, source: "foto flat-lay warna utama produk ini" };
+      }
+      setExistingColorPhotos(photos);
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKey]);
+
+  // Begitu admin pilih warna di dropdown "+ Tambah Warna", otomatis isi
+  // foto kalau warna itu cocok salah satu sumber di existingColorPhotos —
+  // tetap bisa diganti manual (drag foto baru ke kotaknya) kalau salah.
+  useEffect(() => {
+    if (!newColorWarna) {
+      setNewColorImage(null);
+      setNewColorImageIsReused(false);
+      return;
+    }
+    const match = existingColorPhotos[newColorWarna];
+    if (match) {
+      setNewColorImage(match.url);
+      setNewColorImageIsReused(true);
+    } else {
+      setNewColorImage(null);
+      setNewColorImageIsReused(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newColorWarna]);
 
   const usedWarna = new Set(selectedSet?.lineup_color_refs.map((r) => r.warna) ?? []);
   const availableWarna = productWarnaOptions.filter((w) => !usedWarna.has(w));
@@ -681,7 +747,9 @@ export default function LineupWarnaPage() {
                   <div className="mt-5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                     <p className="mb-2 text-xs font-medium text-text">+ Tambah Warna</p>
                     <p className="mb-3 text-xs text-text-faint">
-                      Upload foto flat-lay asli warna ini — tidak perlu generate foto model dulu.
+                      Upload foto flat-lay asli warna ini — tidak perlu generate foto model dulu. Kalau
+                      warnanya sudah punya foto tersimpan (dari generate produk ini atau seri warna
+                      sebelumnya), otomatis terisi.
                     </p>
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="w-40">
@@ -695,6 +763,7 @@ export default function LineupWarnaPage() {
                           {availableWarna.map((w) => (
                             <option key={w} value={w}>
                               {w}
+                              {existingColorPhotos[w] ? " (foto sudah ada)" : ""}
                             </option>
                           ))}
                         </Select>
@@ -704,7 +773,10 @@ export default function LineupWarnaPage() {
                           label="Flat-lay"
                           folder="products"
                           value={newColorImage}
-                          onChange={setNewColorImage}
+                          onChange={(url) => {
+                            setNewColorImage(url);
+                            setNewColorImageIsReused(false);
+                          }}
                           required
                         />
                       </div>
@@ -719,6 +791,12 @@ export default function LineupWarnaPage() {
                         Tambah
                       </Button>
                     </div>
+                    {newColorImageIsReused && newColorWarna && (
+                      <p className="mt-2 text-[11px] text-gold-soft">
+                        Foto otomatis dipakai dari {existingColorPhotos[newColorWarna]?.source} — tarik
+                        foto baru ke kotaknya di atas kalau mau ganti.
+                      </p>
+                    )}
                   </div>
                 )}
               </CardBody>
