@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
+  ArrowLeftRight,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -15,6 +16,7 @@ import {
   Search,
   Sparkles,
   UploadCloud,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -149,6 +151,16 @@ export default function HistoryPage() {
   // satu).
   const [collageShowInfo, setCollageShowInfo] = useState(true);
   const [productSizes, setProductSizes] = useState<string[]>([]);
+  // "Pindah Produk" (November 2026) — admin salah masukin kode produk saat
+  // generate, fotonya ke-link ke kode yang salah. Dulu satu-satunya cara
+  // benerin adalah generate ulang dari nol (boros kredit AI) — sekarang bisa
+  // pindah set ini ke kode yang benar lewat endpoint transfer (lihat
+  // app/api/generation-sets/[id]/transfer/route.ts), foto tidak disentuh.
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferQuery, setTransferQuery] = useState("");
+  const [transferResults, setTransferResults] = useState<{ kode: string; nama: string }[]>([]);
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferring, setTransferring] = useState(false);
 
   async function load(searchTerm: string, pageIndex: number) {
     setLoading(true);
@@ -196,6 +208,9 @@ export default function HistoryPage() {
     setAddSeriWarna("");
     setAddSeriImage(null);
     setVideoPrompt("");
+    setTransferOpen(false);
+    setTransferQuery("");
+    setTransferResults([]);
     // REVISI (Agustus 2026, setelah review video test — admin kirim 5 video
     // referensi ASLI hasil syuting kamera, bukan AI, jadi target "video
     // gabungan berputar mulus" TIDAK realistis dicapai lewat sambung
@@ -234,6 +249,64 @@ export default function HistoryPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
+
+  // Search kode/nama produk tujuan utk panel "Pindah Produk" — debounce sama
+  // pola dgn search produk di app/generate/page.tsx.
+  useEffect(() => {
+    if (!transferOpen) return;
+    const timer = setTimeout(async () => {
+      setTransferLoading(true);
+      const supabase = createClient();
+      const base = supabase.from("products").select("kode, nama");
+      const { data } = transferQuery.trim()
+        ? await base
+            .or(`kode.ilike.%${transferQuery.trim()}%,nama.ilike.%${transferQuery.trim()}%`)
+            .order("kode")
+            .limit(8)
+        : { data: [] as { kode: string; nama: string }[] };
+      setTransferResults(
+        (data ?? []).filter((p) => p.kode !== selected?.product_kode)
+      );
+      setTransferLoading(false);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [transferOpen, transferQuery, selected?.product_kode]);
+
+  async function handleTransfer(targetKode: string, targetNama: string) {
+    if (!selected) return;
+    const ok = await confirmDialog({
+      title: "Pindah ke produk lain?",
+      description:
+        `Set ini akan pindah dari "${selected.product_kode}" ke "${targetKode}" (${targetNama}). ` +
+        "Foto TIDAK digenerate ulang, hanya link kode produknya yang berubah." +
+        (selected.published_at
+          ? ` Set ini sudah pernah dipublish ke katalog "${selected.product_kode}" — transfer ini TIDAK otomatis membenarkan foto yang sudah tayang di sana, publish ulang manual ke "${targetKode}" setelah pindah.`
+          : ""),
+      confirmLabel: "Ya, pindahkan",
+      danger: true,
+    });
+    if (!ok) return;
+
+    setTransferring(true);
+    try {
+      const res = await fetch(`/api/generation-sets/${selected.id}/transfer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newKode: targetKode }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Gagal memindahkan produk");
+      toast.success(`Set berhasil dipindah ke "${targetKode}"`);
+      setTransferOpen(false);
+      setTransferQuery("");
+      setTransferResults([]);
+      await load(search, page);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal memindahkan produk");
+    } finally {
+      setTransferring(false);
+    }
+  }
 
   // Polling "Video Cerita Gabungan" — jalan HANYA saat video_status set
   // yang sedang dibuka === "processing". Semua progress disimpan di DB
@@ -708,6 +781,14 @@ export default function HistoryPage() {
                   <CardTitle>{selected.product_kode}</CardTitle>
                   <div className="flex items-center gap-2">
                     <Badge tone={STATUS_TONE[selected.status]}>{selected.status}</Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setTransferOpen((v) => !v)}
+                    >
+                      <ArrowLeftRight className="h-4 w-4" />
+                      Pindah Produk
+                    </Button>
                     {selected.published_at ? (
                       <Badge tone="success">
                         <CheckCircle2 className="h-3 w-3" />
@@ -722,6 +803,57 @@ export default function HistoryPage() {
                   </div>
                 </CardHeader>
                 <CardBody>
+                  {transferOpen && (
+                    <div className="mb-4 rounded-lg border border-border bg-surface-2 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-text">
+                          Pindah set ini ke kode produk lain
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setTransferOpen(false)}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-text-faint hover:bg-surface hover:text-text"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <p className="mb-3 text-xs text-text-faint">
+                        Salah masukin kode saat generate? Pindahkan set ini (sekarang di &quot;
+                        {selected.product_kode}&quot;) ke kode yang benar — foto TIDAK digenerate
+                        ulang sama sekali, cuma link kode produknya yang berubah.
+                      </p>
+                      <div className="relative mb-2 max-w-sm">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint" />
+                        <Input
+                          value={transferQuery}
+                          onChange={(e) => setTransferQuery(e.target.value)}
+                          placeholder="Cari kode/nama produk tujuan..."
+                          className="pl-9"
+                          autoFocus
+                        />
+                      </div>
+                      {transferLoading ? (
+                        <p className="text-xs text-text-faint">Mencari...</p>
+                      ) : transferQuery.trim() && transferResults.length === 0 ? (
+                        <p className="text-xs text-text-faint">Tidak ada produk yang cocok.</p>
+                      ) : (
+                        <div className="flex flex-col gap-1.5">
+                          {transferResults.map((p) => (
+                            <button
+                              key={p.kode}
+                              type="button"
+                              disabled={transferring}
+                              onClick={() => handleTransfer(p.kode, p.nama)}
+                              className="flex items-center justify-between gap-2 rounded-md border border-border-strong bg-surface px-3 py-2 text-left text-xs hover:border-gold/60 hover:bg-gold/5 disabled:opacity-50"
+                            >
+                              <span className="font-medium text-text">{p.kode}</span>
+                              <span className="truncate text-text-faint">{p.nama}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <p className="mb-4 text-sm text-text-muted">
                     Total biaya estimasi: Rp {selected.total_cost?.toLocaleString("id-ID") ?? "—"} ·
                     Dibuat {formatDate(selected.created_at)}
