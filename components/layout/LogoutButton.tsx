@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 
 export function LogoutButton({
   className,
@@ -17,7 +18,19 @@ export function LogoutButton({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
+  // Saran admin (November 2026): "Tambahkan popup konfirmasi logout ketika
+  // button keluar dipencet" — sebelum ini langsung logout tanpa konfirmasi,
+  // rawan ke-klik tidak sengaja (tombol ini ada di rail ikon desktop tanpa
+  // label teks).
   async function handleLogout() {
+    const ok = await confirmDialog({
+      title: "Keluar dari akun?",
+      description: "Kamu akan keluar dan diarahkan kembali ke halaman login.",
+      confirmLabel: "Ya, keluar",
+      danger: true,
+    });
+    if (!ok) return;
+
     setLoading(true);
     const supabase = createClient();
     await supabase.auth.signOut();
