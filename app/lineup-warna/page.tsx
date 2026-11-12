@@ -185,28 +185,34 @@ export default function LineupWarnaPage() {
   const [style, setStyle] = useState<ColorLineupStyle>("hanger");
   const [styleNote, setStyleNote] = useState("");
   const [generating, setGenerating] = useState(false);
-  // Form "+ Tambah Warna" — pilih dari products.warna produk ini (sama
-  // spt dropdown "Tambah Warna Seri" di History), supaya nama warna
-  // konsisten & tidak typo.
+  // Form "+ Tambah Warna" — SEKARANG hanya utk warna yang BENAR-BENAR belum
+  // punya foto di mana pun (lihat REVISI v2 di bawah) — pilih dari
+  // products.warna produk ini (sama spt dropdown "Tambah Warna Seri" di
+  // History), supaya nama warna konsisten & tidak typo.
   const [productWarnaOptions, setProductWarnaOptions] = useState<string[]>([]);
   const [newColorWarna, setNewColorWarna] = useState("");
   const [newColorImage, setNewColorImage] = useState<string | null>(null);
-  const [newColorImageIsReused, setNewColorImageIsReused] = useState(false);
   const [savingColor, setSavingColor] = useState(false);
-  // REVISI (November 2026, admin: "harusnya dari masternya sudah pernah ada
-  // foto flat laynya dong, kok harus diupload ulang lagi ya?") — sebelum
+  // REVISI (November 2026 v1, admin: "harusnya dari masternya sudah pernah
+  // ada foto flat laynya dong, kok harus diupload ulang lagi ya?") — sebelum
   // ini, "+ Tambah Warna" SELALU minta upload baru meski warna itu
   // sebenarnya sudah punya foto tersimpan di tempat lain: foto flat-lay
   // warna utama set ini (set.product_images, utk product_warna), foto
   // full-body warna lain yang sudah pernah di-generate sbg "seri" (History
   // -> Tambah Warna Seri, ai_generations.variant_product_images), atau foto
   // AI yang sudah dipublish ke katalog per warna (products.warna_images).
-  // Sekarang kalau warna yang dipilih admin cocok salah satu sumber itu,
-  // foto-nya otomatis terisi (masih bisa diganti manual kalau salah/buram —
-  // sama persis seperti mengganti foto tile yang sudah ada).
-  const [existingColorPhotos, setExistingColorPhotos] = useState<Record<string, { url: string; source: string }>>(
-    {}
-  );
+  //
+  // REVISI v2 (langsung menyusul, admin: "ya langsung aja, ngapain harus
+  // dipilih lagi, kecuali kalau mau diganti") — v1 masih minta admin pilih
+  // warnanya dulu di dropdown & klik "Tambah" sebelum foto yang sudah ada
+  // itu benar2 tersimpan. Sekarang effect di bawah (lihat REVISI v2 di sana)
+  // OTOMATIS menyimpan semua warna yang match langsung ke lineup_color_refs
+  // begitu produk ini dibuka — tidak ada lagi langkah pilih+klik utk warna
+  // yang fotonya sudah ada. "+ Tambah Warna" cuma tersisa utk warna yang
+  // genuinely belum ada foto di mana pun (perlu upload asli), atau admin
+  // tetap bisa ganti foto yang auto-tersimpan via drag-drop di tile-nya
+  // (sama kayak tile manual lainnya).
+  const [autoAdding, setAutoAdding] = useState(false);
 
   // Picker gabungan DUA sumber (lihat REVISI v4 di header) — baris
   // ai_generation_sets yang sudah ada (foto AI Studio) + SEMUA produk dari
@@ -263,21 +269,24 @@ export default function LineupWarnaPage() {
   const colorEntries = selectedSet ? collectColorEntries(selectedSet) : [];
   const lineupGen = selectedSet?.ai_generations.find((g) => g.image_role === "kolase_warna") ?? null;
 
-  // Pilihan warna yang tersisa utk "+ Tambah Warna" — warna produk ini yang
-  // belum ada di lineup_color_refs. Sekalian siapkan existingColorPhotos
-  // (lihat REVISI di atas) — gabungan foto flat-lay warna utama set ini
-  // (product_images, utk product_warna) + foto "seri" yang sudah pernah
-  // digenerate (variant_product_images, prioritas tertinggi krn ASLI utk
-  // warna spesifik itu) + foto katalog yang sudah dipublish per warna
-  // (products.warna_images, prioritas terendah krn itu hasil AI, bukan
-  // flat-lay asli — cuma fallback kalau tidak ada sumber lain).
+  // Siapkan existingColorPhotos (lihat REVISI v1 di atas) — gabungan foto
+  // flat-lay warna utama set ini (product_images, utk product_warna) +
+  // foto "seri" yang sudah pernah digenerate (variant_product_images,
+  // prioritas tertinggi krn ASLI utk warna spesifik itu) + foto katalog
+  // yang sudah dipublish per warna (products.warna_images, prioritas
+  // terendah krn itu hasil AI, bukan flat-lay asli — cuma fallback kalau
+  // tidak ada sumber lain). Lalu (REVISI v2) langsung SIMPAN semua warna
+  // yang match ke lineup_color_refs set ini — tidak nunggu admin pilih+klik
+  // "Tambah" dulu. Cuma jalan utk produk yang SUDAH punya baris
+  // ai_generation_sets (selectedSet) — produk "virtual" (belum pernah
+  // diproses AI Fashion Studio sama sekali) tetap pakai alur manual, supaya
+  // sekadar membuka/melihat produk di picker ini tidak diam2 bikin baris
+  // "wadah" baru di DB kalau admin tidak benar2 berniat kerja di produk itu.
   useEffect(() => {
     setNewColorWarna("");
     setNewColorImage(null);
-    setNewColorImageIsReused(false);
     if (!productKode) {
       setProductWarnaOptions([]);
-      setExistingColorPhotos({});
       return;
     }
     let cancelled = false;
@@ -289,7 +298,8 @@ export default function LineupWarnaPage() {
         .eq("kode", productKode)
         .single();
       if (cancelled) return;
-      setProductWarnaOptions((data?.warna as string[] | null) ?? []);
+      const warnaList = (data?.warna as string[] | null) ?? [];
+      setProductWarnaOptions(warnaList);
 
       const photos: Record<string, { url: string; source: string }> = {};
       const warnaImages = (data?.warna_images as Record<string, { image: string }> | null) ?? {};
@@ -307,33 +317,35 @@ export default function LineupWarnaPage() {
       if (utamaWarna && utamaFlatlay) {
         photos[utamaWarna] = { url: utamaFlatlay, source: "foto flat-lay warna utama produk ini" };
       }
-      setExistingColorPhotos(photos);
+      if (cancelled) return;
+
+      if (selectedSet) {
+        const alreadyHave = new Set(selectedSet.lineup_color_refs?.map((r) => r.warna) ?? []);
+        const toAutoAdd = Object.entries(photos).filter(
+          ([warna]) => warnaList.includes(warna) && !alreadyHave.has(warna)
+        );
+        if (toAutoAdd.length > 0) {
+          setAutoAdding(true);
+          try {
+            await saveColorRefs(selectedSet.id, [
+              ...(selectedSet.lineup_color_refs ?? []),
+              ...toAutoAdd.map(([warna, { url }]) => ({ warna, image: url })),
+            ]);
+            if (!cancelled) await refreshOne(selectedSet.id);
+          } catch {
+            // Diam2 gagal — admin masih bisa tambah manual lewat "+ Tambah
+            // Warna" kalau warna itu ternyata tidak ikut tersimpan otomatis.
+          } finally {
+            if (!cancelled) setAutoAdding(false);
+          }
+        }
+      }
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKey]);
-
-  // Begitu admin pilih warna di dropdown "+ Tambah Warna", otomatis isi
-  // foto kalau warna itu cocok salah satu sumber di existingColorPhotos —
-  // tetap bisa diganti manual (drag foto baru ke kotaknya) kalau salah.
-  useEffect(() => {
-    if (!newColorWarna) {
-      setNewColorImage(null);
-      setNewColorImageIsReused(false);
-      return;
-    }
-    const match = existingColorPhotos[newColorWarna];
-    if (match) {
-      setNewColorImage(match.url);
-      setNewColorImageIsReused(true);
-    } else {
-      setNewColorImage(null);
-      setNewColorImageIsReused(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newColorWarna]);
 
   const usedWarna = new Set(selectedSet?.lineup_color_refs.map((r) => r.warna) ?? []);
   const availableWarna = productWarnaOptions.filter((w) => !usedWarna.has(w));
@@ -642,6 +654,7 @@ export default function LineupWarnaPage() {
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Layers className="h-4 w-4 text-gold" />
                   Referensi Warna — {productKode}
+                  {autoAdding && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-faint" />}
                 </CardTitle>
               </CardHeader>
               <CardBody>
@@ -650,7 +663,8 @@ export default function LineupWarnaPage() {
                   sesuai posisi di bawah ini — tarik (drag) handle-nya utk atur urutan, atau di HP
                   pakai dropdown posisi. Desain & warna tiap produk WAJIB tetap persis sama dengan
                   foto ini, AI cuma menyusun ulang presentasinya. Foto buram/salah? Tarik foto baru
-                  langsung ke kotaknya utk mengganti.
+                  langsung ke kotaknya utk mengganti.{" "}
+                  {autoAdding && "Sedang mengisi warna yang fotonya sudah ada..."}
                 </p>
 
                 <div className="flex flex-wrap gap-4">
@@ -740,16 +754,18 @@ export default function LineupWarnaPage() {
                   })}
                 </div>
 
-                {/* "+ Tambah Warna" — attach foto flat-lay ASLI langsung,
-                    TIDAK memicu generate AI (beda dari "Tambah Warna Seri"
-                    di History). */}
+                {/* "+ Tambah Warna" — SEKARANG cuma utk warna yang
+                    genuinely belum ada foto di mana pun (lihat REVISI v2 di
+                    atas — warna yang fotonya sudah ada otomatis tersimpan
+                    duluan sbg tile, tidak lewat sini lagi). Upload flat-lay
+                    ASLI langsung, TIDAK memicu generate AI (beda dari
+                    "Tambah Warna Seri" di History). */}
                 {availableWarna.length > 0 && colorEntries.length < MAX_TOTAL_COLORS && (
                   <div className="mt-5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                     <p className="mb-2 text-xs font-medium text-text">+ Tambah Warna</p>
                     <p className="mb-3 text-xs text-text-faint">
-                      Upload foto flat-lay asli warna ini — tidak perlu generate foto model dulu. Kalau
-                      warnanya sudah punya foto tersimpan (dari generate produk ini atau seri warna
-                      sebelumnya), otomatis terisi.
+                      Warna di bawah ini belum ada foto tersimpan sama sekali — upload foto flat-lay
+                      asli warna ini (tidak perlu generate foto model dulu).
                     </p>
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="w-40">
@@ -763,7 +779,6 @@ export default function LineupWarnaPage() {
                           {availableWarna.map((w) => (
                             <option key={w} value={w}>
                               {w}
-                              {existingColorPhotos[w] ? " (foto sudah ada)" : ""}
                             </option>
                           ))}
                         </Select>
@@ -773,10 +788,7 @@ export default function LineupWarnaPage() {
                           label="Flat-lay"
                           folder="products"
                           value={newColorImage}
-                          onChange={(url) => {
-                            setNewColorImage(url);
-                            setNewColorImageIsReused(false);
-                          }}
+                          onChange={setNewColorImage}
                           required
                         />
                       </div>
@@ -791,12 +803,6 @@ export default function LineupWarnaPage() {
                         Tambah
                       </Button>
                     </div>
-                    {newColorImageIsReused && newColorWarna && (
-                      <p className="mt-2 text-[11px] text-gold-soft">
-                        Foto otomatis dipakai dari {existingColorPhotos[newColorWarna]?.source} — tarik
-                        foto baru ke kotaknya di atas kalau mau ganti.
-                      </p>
-                    )}
                   </div>
                 )}
               </CardBody>
