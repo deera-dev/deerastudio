@@ -69,7 +69,16 @@ export type GenerationSetStatus =
 
 export interface GenerationSet {
   id: string;
-  product_kode: string; // FK asli ke products.kode (project sama dgn Deera)
+  // DB-nya sekarang nullable (lihat migrasi
+  // ai_generation_sets_support_sampel) — tapi tipe di sini SENGAJA tetap
+  // `string` krn dipakai di 30+ file yang semuanya mengasumsikan produk
+  // katalog (publish/transfer/history/content/color-lineup, dll — semua
+  // itu butuh kode katalog asli, TIDAK berlaku utk sampel). Set yang
+  // sumbernya sampel (sampel_id terisi, product_kode NULL di DB) HANYA
+  // ditangani di app/generate/page.tsx lewat tipe lokal sendiri
+  // (GenerationSetResult) — JANGAN andalkan tipe ini utk baris itu.
+  product_kode: string;
+  sampel_id: string | null;
   model_id: string;
   pose_id: string;
   background_mode: BackgroundMode;

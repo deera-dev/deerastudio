@@ -191,24 +191,39 @@ const productImagesSchema = z.object({
   fullBody: z.string().url().optional(),
 });
 
-const requestSchema = z.object({
-  modelId: z.string().uuid(),
-  poseId: z.string().uuid(), // pose untuk foto utama — DIPAKAI ULANG jg utk foto angle (REVISI #8)
-  productKode: z.string(),
-  backgroundMode: z.enum(["auto", "preset", "ai_improvised"]).default("auto"),
-  backgroundPresetId: z.string().uuid().optional(),
-  accessoryPresetIds: z.array(z.string().uuid()).default([]),
-  productImages: productImagesSchema, // foto warna UTAMA/default — 7 slot lengkap
-  productWarna: z.string().optional(), // warna utama yg dipakai di foto utama/angle
-  // REVISI #6 (final, hemat-foto): "seri" = varian WARNA lain dari produk
-  // yang sama. Cukup SATU foto full-body per warna — foto detail/konstruksi
-  // lainnya otomatis dipakai ulang dari productImages (warna utama), karena
-  // bentuk/bordir/motif identik lintas warna, cuma warna kain yang beda.
-  seriEntries: z
-    .array(z.object({ warna: z.string(), image: z.string().url() }))
-    .max(6)
-    .default([]),
-});
+// REVISI (November 2026 — admin: "sekarang di deerastudio bisa generate
+// sampel, dia belum jadi produk dengan kode, masih berbentuk sampel tapi
+// mau dibuat foto AI juga, sama persis dengan alur yang sekarang, hanya
+// tidak memiliki kode produk"): identitas target sekarang BISA produk
+// katalog (productKode) ATAU sampel yang belum punya kode (sampelId) — lihat
+// migrasi ai_generation_sets_support_sampel & refine() di bawah (persis
+// satu yang boleh terisi). SEMUA logic generate di bawah (pose, background,
+// garment references, Nano Banana Pro) tidak berubah sama sekali — cuma
+// identitas yang disimpan di ai_generation_sets yang beda.
+const requestSchema = z
+  .object({
+    modelId: z.string().uuid(),
+    poseId: z.string().uuid(), // pose untuk foto utama — DIPAKAI ULANG jg utk foto angle (REVISI #8)
+    productKode: z.string().optional(),
+    sampelId: z.string().uuid().optional(),
+    backgroundMode: z.enum(["auto", "preset", "ai_improvised"]).default("auto"),
+    backgroundPresetId: z.string().uuid().optional(),
+    accessoryPresetIds: z.array(z.string().uuid()).default([]),
+    productImages: productImagesSchema, // foto warna UTAMA/default — 7 slot lengkap
+    productWarna: z.string().optional(), // warna utama yg dipakai di foto utama/angle
+    // REVISI #6 (final, hemat-foto): "seri" = varian WARNA lain dari produk
+    // yang sama. Cukup SATU foto full-body per warna — foto detail/konstruksi
+    // lainnya otomatis dipakai ulang dari productImages (warna utama), karena
+    // bentuk/bordir/motif identik lintas warna, cuma warna kain yang beda.
+    seriEntries: z
+      .array(z.object({ warna: z.string(), image: z.string().url() }))
+      .max(6)
+      .default([]),
+  })
+  .refine((v) => Boolean(v.productKode) !== Boolean(v.sampelId), {
+    message: "Isi persis satu dari productKode atau sampelId, tidak boleh dua-duanya atau kosong.",
+    path: ["productKode"],
+  });
 
 // Berapa banyak foto pose LAIN dari model yang sama dipakai sbg penguat
 // identitas di tiap pemanggilan Nano Banana Pro (di luar foto pose target).
@@ -305,7 +320,8 @@ export async function POST(req: NextRequest) {
   const { data: set, error: setError } = await supabase
     .from("ai_generation_sets")
     .insert({
-      product_kode: input.productKode,
+      product_kode: input.productKode ?? null,
+      sampel_id: input.sampelId ?? null,
       model_id: input.modelId,
       pose_id: input.poseId,
       background_mode: input.backgroundMode,

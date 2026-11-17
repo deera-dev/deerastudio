@@ -44,7 +44,17 @@ import type { Generation, GenerationSet, GenerationSetStatus, ImageRole } from "
 // jadi tetap ringan & benar berapa pun jumlah riwayatnya.
 const PAGE_SIZE = 10;
 
-type SetWithGenerations = GenerationSet & { ai_generations: Generation[] };
+type SetWithGenerations = GenerationSet & {
+  ai_generations: Generation[];
+  // Embed via FK sampel_id (lihat route GET /api/generation-sets/[id] &
+  // app/generate/page.tsx GenerationSetResult) — terisi kalau set ini
+  // sumbernya sampel (product_kode null di DB). null kalau produk katalog biasa.
+  sampel: { nomor: string; nama: string } | null;
+};
+
+function displayLabel(s: { product_kode: string; sampel: { nomor: string; nama: string } | null }) {
+  return s.sampel ? `${s.sampel.nomor} (${s.sampel.nama})` : s.product_kode;
+}
 
 const STATUS_TONE: Record<GenerationSetStatus, "success" | "gold" | "danger" | "muted"> = {
   completed: "success",
@@ -165,9 +175,17 @@ export default function HistoryPage() {
   async function load(searchTerm: string, pageIndex: number) {
     setLoading(true);
     const supabase = createClient();
+    // REVISI (November 2026) — set generate utk SAMPEL (belum punya kode
+    // produk, lihat app/generate/page.tsx) TETAP muncul di History: admin
+    // perlu bisa revisi (regenerate) & bikin kolase hasil generate sampel
+    // juga, tidak cuma sesaat di halaman Generate. Yang khusus kode katalog
+    // asli (publish, pindah produk/transfer, color-lineup) disembunyikan
+    // per-baris kalau product_kode null (lihat displayLabel & guard di
+    // handlePublish/handleTransfer di bawah) — bukan dihilangkan dari
+    // daftar riwayatnya.
     let query = supabase
       .from("ai_generation_sets")
-      .select("*, ai_generations(*)", { count: "exact" })
+      .select("*, ai_generations(*), sampel:sampel_id(nomor, nama)", { count: "exact" })
       .order("created_at", { ascending: false });
     if (searchTerm.trim()) {
       query = query.ilike("product_kode", `%${searchTerm.trim()}%`);
@@ -226,7 +244,7 @@ export default function HistoryPage() {
     );
     setComposeUrls(utamaGen ? [utamaGen.output_image_url as string] : []);
     setCollageUrls([]);
-    if (!selected) {
+    if (!selected || !selected.product_kode) {
       setProductWarnaOptions([]);
       setProductSizes([]);
       return;
@@ -273,7 +291,7 @@ export default function HistoryPage() {
   }, [transferOpen, transferQuery, selected?.product_kode]);
 
   async function handleTransfer(targetKode: string, targetNama: string) {
-    if (!selected) return;
+    if (!selected || !selected.product_kode) return;
     const ok = await confirmDialog({
       title: "Pindah ke produk lain?",
       description:
@@ -375,7 +393,7 @@ export default function HistoryPage() {
     const supabase = createClient();
     const { data } = await supabase
       .from("ai_generation_sets")
-      .select("*, ai_generations(*)")
+      .select("*, ai_generations(*), sampel:sampel_id(nomor, nama)")
       .eq("id", id)
       .single();
     if (data) {
@@ -484,7 +502,7 @@ export default function HistoryPage() {
         body: JSON.stringify({
           leftUrl: collageUrls[0],
           rightUrl: collageUrls[1],
-          kode: selected.product_kode,
+          kode: selected.product_kode ?? undefined,
           size: productSizes.join(" / ") || undefined,
           showInfo: collageShowInfo,
         }),
@@ -509,7 +527,7 @@ export default function HistoryPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productKode: selected.product_kode,
+          productKode: selected.product_kode ?? undefined,
           durationSeconds: videoDuration,
         }),
       });
@@ -549,7 +567,7 @@ export default function HistoryPage() {
   }
 
   async function handlePublish() {
-    if (!selected) return;
+    if (!selected || !selected.product_kode) return;
     const utama = selected.ai_generations.find((g) => g.image_role === "utama");
     // REVISI #7 (Agustus 2026, "4 foto tetap") — slot products.detail
     // (galeri foto tambahan di katalog) sekarang diisi dari SEMUA baris
@@ -727,13 +745,13 @@ export default function HistoryPage() {
                         src={utama.output_thumb_url ?? utama.output_image_url}
                         loading="lazy"
                         decoding="async"
-                        alt={set.product_kode}
+                        alt={displayLabel(set)}
                         className="h-full w-full object-cover"
                       />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-text">{set.product_kode}</div>
+                    <div className="truncate text-sm font-medium text-text">{displayLabel(set)}</div>
                     <div className="text-xs text-text-faint">{formatDate(set.created_at)}</div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -785,32 +803,39 @@ export default function HistoryPage() {
             >
               <Card>
                 <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-                  <CardTitle>{selected.product_kode}</CardTitle>
+                  <CardTitle>{displayLabel(selected)}</CardTitle>
                   <div className="flex items-center gap-2">
                     <Badge tone={STATUS_TONE[selected.status]}>{selected.status}</Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setTransferOpen((v) => !v)}
-                    >
-                      <ArrowLeftRight className="h-4 w-4" />
-                      Pindah Produk
-                    </Button>
-                    {selected.published_at ? (
-                      <Badge tone="success">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Published {formatDate(selected.published_at)}
-                      </Badge>
-                    ) : (
-                      <Button size="sm" loading={publishing} onClick={handlePublish}>
-                        <UploadCloud className="h-4 w-4" />
-                        Publish ke Katalog
-                      </Button>
+                    {!selected.product_kode && <Badge tone="muted">Sampel</Badge>}
+                    {/* Publish/Pindah Produk cuma berlaku utk produk katalog asli
+                        (butuh kode) — sampel belum punya kode, tidak ditampilkan. */}
+                    {selected.product_kode && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setTransferOpen((v) => !v)}
+                        >
+                          <ArrowLeftRight className="h-4 w-4" />
+                          Pindah Produk
+                        </Button>
+                        {selected.published_at ? (
+                          <Badge tone="success">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Published {formatDate(selected.published_at)}
+                          </Badge>
+                        ) : (
+                          <Button size="sm" loading={publishing} onClick={handlePublish}>
+                            <UploadCloud className="h-4 w-4" />
+                            Publish ke Katalog
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 </CardHeader>
                 <CardBody>
-                  {transferOpen && (
+                  {transferOpen && selected.product_kode && (
                     <div className="mb-4 rounded-lg border border-border bg-surface-2 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <p className="text-xs font-medium text-text">
@@ -1173,11 +1198,17 @@ export default function HistoryPage() {
                                 Tampilkan kode &amp; ukuran
                               </span>
                               <span className="mt-0.5 block text-xs text-text-faint">
-                                Bar hijau berisi kode produk ({selected.product_kode})
-                                {productSizes.length > 0
-                                  ? ` + ukuran (${productSizes.join(" / ")})`
-                                  : " — produk ini belum ada data ukuran di katalog"}{" "}
-                                di bagian bawah kolase.
+                                {selected.product_kode ? (
+                                  <>
+                                    Bar hijau berisi kode produk ({selected.product_kode})
+                                    {productSizes.length > 0
+                                      ? ` + ukuran (${productSizes.join(" / ")})`
+                                      : " — produk ini belum ada data ukuran di katalog"}{" "}
+                                    di bagian bawah kolase.
+                                  </>
+                                ) : (
+                                  "Sampel belum punya kode/ukuran katalog — bar info tidak ditampilkan."
+                                )}
                               </span>
                             </span>
                           </label>
