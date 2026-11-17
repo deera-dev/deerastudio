@@ -165,9 +165,16 @@ export default function HistoryPage() {
   async function load(searchTerm: string, pageIndex: number) {
     setLoading(true);
     const supabase = createClient();
+    // REVISI (November 2026) — set generate utk SAMPEL (belum punya kode
+    // produk, lihat app/generate/page.tsx) sengaja TIDAK muncul di History:
+    // halaman ini (search by kode, publish ke katalog, transfer antar kode,
+    // color-lineup) seluruhnya mengasumsikan kode katalog asli, yang tidak
+    // berlaku utk sampel. Hasil generate sampel cuma bisa dilihat langsung
+    // di halaman Generate sesaat setelah selesai.
     let query = supabase
       .from("ai_generation_sets")
       .select("*, ai_generations(*)", { count: "exact" })
+      .not("product_kode", "is", null)
       .order("created_at", { ascending: false });
     if (searchTerm.trim()) {
       query = query.ilike("product_kode", `%${searchTerm.trim()}%`);
