@@ -44,16 +44,10 @@ import type { Generation, GenerationSet, GenerationSetStatus, ImageRole } from "
 // jadi tetap ringan & benar berapa pun jumlah riwayatnya.
 const PAGE_SIZE = 10;
 
-type SetWithGenerations = GenerationSet & {
-  ai_generations: Generation[];
-  // Embed via FK sampel_id (lihat route GET /api/generation-sets/[id] &
-  // app/generate/page.tsx GenerationSetResult) — terisi kalau set ini
-  // sumbernya sampel (product_kode null di DB). null kalau produk katalog biasa.
-  sampel: { nomor: string; nama: string } | null;
-};
+type SetWithGenerations = GenerationSet & { ai_generations: Generation[] };
 
-function displayLabel(s: { product_kode: string; sampel: { nomor: string; nama: string } | null }) {
-  return s.sampel ? `${s.sampel.nomor} (${s.sampel.nama})` : s.product_kode;
+function displayLabel(s: { product_kode: string; sampel_nomor: string | null }) {
+  return s.sampel_nomor ?? s.product_kode;
 }
 
 const STATUS_TONE: Record<GenerationSetStatus, "success" | "gold" | "danger" | "muted"> = {
@@ -185,7 +179,7 @@ export default function HistoryPage() {
     // daftar riwayatnya.
     let query = supabase
       .from("ai_generation_sets")
-      .select("*, ai_generations(*), sampel:sampel_id(nomor, nama)", { count: "exact" })
+      .select("*, ai_generations(*)", { count: "exact" })
       .order("created_at", { ascending: false });
     if (searchTerm.trim()) {
       query = query.ilike("product_kode", `%${searchTerm.trim()}%`);
@@ -393,7 +387,7 @@ export default function HistoryPage() {
     const supabase = createClient();
     const { data } = await supabase
       .from("ai_generation_sets")
-      .select("*, ai_generations(*), sampel:sampel_id(nomor, nama)")
+      .select("*, ai_generations(*)")
       .eq("id", id)
       .single();
     if (data) {
