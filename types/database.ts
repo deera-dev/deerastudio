@@ -70,15 +70,22 @@ export type GenerationSetStatus =
 export interface GenerationSet {
   id: string;
   // DB-nya sekarang nullable (lihat migrasi
-  // ai_generation_sets_support_sampel) — tapi tipe di sini SENGAJA tetap
-  // `string` krn dipakai di 30+ file yang semuanya mengasumsikan produk
-  // katalog (publish/transfer/history/content/color-lineup, dll — semua
-  // itu butuh kode katalog asli, TIDAK berlaku utk sampel). Set yang
-  // sumbernya sampel (sampel_id terisi, product_kode NULL di DB) HANYA
-  // ditangani di app/generate/page.tsx lewat tipe lokal sendiri
-  // (GenerationSetResult) — JANGAN andalkan tipe ini utk baris itu.
+  // ai_generation_sets_support_sampel &
+  // ai_generation_sets_sampel_nomor_standalone) — tapi tipe di sini
+  // SENGAJA tetap `string` krn dipakai di 30+ file yang semuanya
+  // mengasumsikan produk katalog (publish/transfer/history/content/
+  // color-lineup, dll — semua itu butuh kode katalog asli, TIDAK berlaku
+  // utk sampel). Set yang belum punya kode (sampel_nomor terisi,
+  // product_kode NULL di DB) HANYA ditangani di app/generate/page.tsx &
+  // app/history/page.tsx lewat tipe lokal masing-masing — JANGAN andalkan
+  // tipe ini utk baris itu.
   product_kode: string;
-  sampel_id: string | null;
+  // Label bebas utk set yang belum punya kode produk — di-generate OTOMATIS
+  // server-side saat submit (app/api/generate-set/route.ts), BUKAN dipilih
+  // dari tabel `sampel` (Planning Repeat admin — konsep TERPISAH, tidak ada
+  // hubungannya sama sekali, lihat diskusi Nov 2026). null kalau set ini
+  // produk katalog biasa (product_kode terisi).
+  sampel_nomor: string | null;
   model_id: string;
   pose_id: string;
   background_mode: BackgroundMode;

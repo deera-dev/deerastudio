@@ -70,21 +70,25 @@ type ProductRow = {
 // sampel, dia belum jadi produk dengan kode, masih berbentuk sampel tapi
 // mau dibuat foto AI juga, sama persis dengan alur yang sekarang, hanya
 // tidak memiliki kode produk"): step "2. Produk" sekarang punya 2 mode —
-// Produk Katalog (seperti sebelumnya) ATAU Sampel (tabel `sampel`, belum
-// punya kode_produk — begitu sampel disetujui & dapat kode, pakai mode
-// Produk Katalog seperti biasa). Sampel TIDAK punya daftar warna/variant
-// sendiri (beda dari products.warna), jadi bagian "Foto seri varian warna"
-// di bawah TIDAK berlaku — cukup 1 identitas, 1 set foto, sama seperti
-// produk tanpa variant warna. Publish ke katalog, Transfer, Content,
-// Color Lineup, dan History TETAP produk-katalog-saja (semua itu butuh
-// kode katalog asli) — hasil generate sampel cuma bisa dilihat/di-download
-// langsung di halaman ini, TIDAK muncul di halaman History.
-type SampelRow = {
-  id: string;
-  nomor: string;
-  nama: string;
-  model_foto: string[] | null;
-};
+// Produk Katalog (seperti sebelumnya) ATAU Sampel (belum ada kode). Mode
+// kedua TIDAK punya daftar warna/variant (beda dari products.warna), jadi
+// bagian "Foto seri varian warna" di bawah TIDAK berlaku — cukup 1
+// identitas, 1 set foto, sama seperti produk tanpa variant warna. Publish
+// ke katalog, Transfer, Content, Color Lineup TETAP produk-katalog-saja
+// (semua itu butuh kode katalog asli).
+//
+// REVISI (November 2026, segera setelah itu — admin: "loh beda, itu mah
+// sampel planing, ga ada hubungannya ... kalau emang diharuskan ada nomor,
+// ya generate aja pas generate image, jadi kalau pilih tanpa sampel ya
+// gausah milih produk, angkanya nanti otomatis ke generate"): mode
+// "Sampel" SEMULA minta admin cari & pilih dari tabel `sampel` (fitur
+// Planning Repeat di Admin) — SALAH PAHAM, itu alur planning produk masa
+// depan yang tidak ada hubungannya sama sekali dgn generate foto AI di
+// sini. Sekarang mode ini TIDAK punya picker apa pun — langsung lanjut ke
+// step 3, server yang generate label internal (sampel_nomor) otomatis saat
+// submit (lihat buildSampelNomor() di app/api/generate-set/route.ts). Hasil
+// generate sampel SEKARANG JUGA muncul di History (lihat REVISI terkait di
+// app/history/page.tsx) — bisa direvisi/dikolase seperti set produk biasa.
 
 type ProductImages = {
   front: string | null;
@@ -109,11 +113,6 @@ type SeriEntry = {
 
 type GenerationSetResult = GenerationSet & {
   ai_generations: Generation[];
-  // Embed via FK sampel_id (lihat route GET /api/generation-sets/[id]) —
-  // terisi kalau set ini sumbernya sampel (product_kode null di DB,
-  // walau tipe GenerationSet.product_kode sengaja tetap `string`, lihat
-  // catatan di types/database.ts). null kalau set ini produk katalog biasa.
-  sampel: { nomor: string; nama: string } | null;
 };
 
 const ACCESSORY_CATEGORY_LABELS: Record<AccessoryCategory, string> = {
@@ -173,10 +172,6 @@ export default function GeneratePage() {
   const [selectedProduct, setSelectedProduct] = useState<ProductRow | null>(null);
   const [productWarna, setProductWarna] = useState("");
 
-  const [sampelQuery, setSampelQuery] = useState("");
-  const [sampelResults, setSampelResults] = useState<SampelRow[]>([]);
-  const [loadingSampel, setLoadingSampel] = useState(true);
-  const [selectedSampel, setSelectedSampel] = useState<SampelRow | null>(null);
   // REVISI FINAL (Agustus 2026): "seri" = varian WARNA lain dari produk yang
   // sama, TIAP warna dgn foto flat-lay ASLI sendiri (bukan tebakan AI dari
   // recolor foto utama — itu sempat dicoba, akurasinya diragukan).
@@ -259,45 +254,15 @@ export default function GeneratePage() {
     return () => clearTimeout(timer);
   }, [productQuery]);
 
-  // Sampel yang belum punya kode_produk (belum disetujui jadi produk
-  // katalog) — begitu disetujui & dapat kode, muncul di picker "Produk
-  // Katalog" biasa, bukan di sini lagi.
-  useEffect(() => {
-    if (pickerMode !== "sampel") return;
-    const timer = setTimeout(async () => {
-      setLoadingSampel(true);
-      const supabase = createClient();
-      const base = supabase.from("sampel").select("id,nomor,nama,model_foto").is("kode_produk", null);
-      const { data } = sampelQuery.trim()
-        ? await base
-            .or(`nomor.ilike.%${sampelQuery}%,nama.ilike.%${sampelQuery}%`)
-            .order("created_at", { ascending: false })
-            .limit(30)
-        : await base.order("created_at", { ascending: false }).limit(30);
-      setSampelResults((data as SampelRow[]) ?? []);
-      setLoadingSampel(false);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [pickerMode, sampelQuery]);
-
   function selectProduct(product: ProductRow) {
     setSelectedProduct(product);
-    setSelectedSampel(null);
     setProductWarna(product.warna?.[0] ?? "");
     setSeriEntries([]); // admin upload manual foto per warna yang mau digenerate sbg seri
-  }
-
-  function selectSampel(sampel: SampelRow) {
-    setSelectedSampel(sampel);
-    setSelectedProduct(null);
-    setProductWarna("");
-    setSeriEntries([]);
   }
 
   function switchPickerMode(mode: "produk" | "sampel") {
     setPickerMode(mode);
     setSelectedProduct(null);
-    setSelectedSampel(null);
     setProductWarna("");
     setSeriEntries([]);
   }
@@ -325,7 +290,9 @@ export default function GeneratePage() {
   // belum ada, jadi dicek & diperingatkan di sini SEBELUM submit juga.
   const hasBackPose = poses.some((p) => p.is_back_view);
   const step1Done = !!selectedModelId && !!selectedPoseId && hasBackPose;
-  const step2Done = !!selectedProduct || !!selectedSampel;
+  // Mode "sampel" tidak punya picker apa pun (lihat REVISI di atas) — step
+  // ini otomatis selesai begitu mode-nya dipilih.
+  const step2Done = pickerMode === "sampel" || !!selectedProduct;
   const step3Done = !!productImages.front;
   const canSubmit = step1Done && step2Done && step3Done && !submitting;
 
@@ -337,7 +304,7 @@ export default function GeneratePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if ((!selectedProduct && !selectedSampel) || !productImages.front) return;
+    if ((pickerMode === "produk" && !selectedProduct) || !productImages.front) return;
     setSubmitting(true);
     setResult(null);
 
@@ -350,7 +317,7 @@ export default function GeneratePage() {
         body: JSON.stringify({
           modelId: selectedModelId,
           poseId: selectedPoseId,
-          ...(selectedProduct ? { productKode: selectedProduct.kode } : { sampelId: selectedSampel!.id }),
+          ...(pickerMode === "produk" ? { productKode: selectedProduct!.kode } : {}),
           backgroundMode,
           backgroundPresetId: backgroundMode === "preset" ? selectedPresetId || undefined : undefined,
           accessoryPresetIds: selectedAccessoryIds,
@@ -604,65 +571,11 @@ export default function GeneratePage() {
                 </div>
               </>
             ) : (
-              <>
-                <div>
-                  <Label htmlFor="gen-sampel">Cari sampel (opsional)</Label>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint" />
-                    <Input
-                      id="gen-sampel"
-                      value={sampelQuery}
-                      onChange={(e) => setSampelQuery(e.target.value)}
-                      placeholder="Ketik nomor/nama sampel, atau langsung pilih di bawah"
-                      className="pl-9"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto rounded-md border border-border p-2 sm:grid-cols-4">
-                  {loadingSampel ? (
-                    <p className="col-span-full py-6 text-center text-sm text-text-faint">Memuat sampel...</p>
-                  ) : sampelResults.length === 0 ? (
-                    <p className="col-span-full py-6 text-center text-sm text-text-faint">
-                      Tidak ada sampel yang cocok (yang sudah dapat kode produk tidak muncul di sini —
-                      pakai tab &quot;Produk Katalog&quot;).
-                    </p>
-                  ) : (
-                    sampelResults.map((s) => {
-                      const active = selectedSampel?.id === s.id;
-                      const thumb = s.model_foto?.[0] ?? null;
-                      return (
-                        <button
-                          type="button"
-                          key={s.id}
-                          onClick={() => selectSampel(s)}
-                          className={cn(
-                            "group relative overflow-hidden rounded-md border-2 text-left transition-colors",
-                            active ? "border-gold" : "border-transparent hover:border-border-strong"
-                          )}
-                        >
-                          <div className="flex aspect-square w-full items-center justify-center bg-surface-2">
-                            {thumb ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={thumb} alt={s.nama} className="h-full w-full object-cover" />
-                            ) : (
-                              <ImageIcon className="h-6 w-6 text-text-faint" />
-                            )}
-                          </div>
-                          {active && (
-                            <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gold text-ink">
-                              <Check className="h-3 w-3" />
-                            </span>
-                          )}
-                          <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1.5 py-1 text-[10px] leading-tight text-white">
-                            {s.nomor}
-                          </span>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </>
+              <p className="rounded-md border border-border bg-surface-2 p-3 text-sm text-text-muted">
+                Tidak perlu pilih apa-apa di sini — langsung lanjut ke foto di bawah. Label
+                internal buat set ini dibuat otomatis saat generate (cuma biar bisa dibedakan
+                di History), tidak terhubung ke sampel Planning Repeat mana pun.
+              </p>
             )}
 
             {selectedProduct && (
@@ -758,13 +671,6 @@ export default function GeneratePage() {
               </>
             )}
 
-            {selectedSampel && (
-              <p className="text-sm text-text">
-                Dipilih: <span className="font-medium text-gold-dark">{selectedSampel.nomor}</span> —{" "}
-                {selectedSampel.nama}{" "}
-                <span className="text-xs text-text-faint">(sampel, belum ada kode produk)</span>
-              </p>
-            )}
           </CardBody>
         </Card>
 
@@ -998,7 +904,7 @@ export default function GeneratePage() {
               <CardHeader className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-gold" />
-                  Hasil — {result.sampel ? `${result.sampel.nomor} (${result.sampel.nama})` : result.product_kode}
+                  Hasil — {result.sampel_nomor ?? result.product_kode}
                 </CardTitle>
                 <Badge
                   tone={

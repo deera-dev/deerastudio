@@ -194,36 +194,51 @@ const productImagesSchema = z.object({
 // REVISI (November 2026 — admin: "sekarang di deerastudio bisa generate
 // sampel, dia belum jadi produk dengan kode, masih berbentuk sampel tapi
 // mau dibuat foto AI juga, sama persis dengan alur yang sekarang, hanya
-// tidak memiliki kode produk"): identitas target sekarang BISA produk
-// katalog (productKode) ATAU sampel yang belum punya kode (sampelId) — lihat
-// migrasi ai_generation_sets_support_sampel & refine() di bawah (persis
-// satu yang boleh terisi). SEMUA logic generate di bawah (pose, background,
-// garment references, Nano Banana Pro) tidak berubah sama sekali — cuma
-// identitas yang disimpan di ai_generation_sets yang beda.
-const requestSchema = z
-  .object({
-    modelId: z.string().uuid(),
-    poseId: z.string().uuid(), // pose untuk foto utama — DIPAKAI ULANG jg utk foto angle (REVISI #8)
-    productKode: z.string().optional(),
-    sampelId: z.string().uuid().optional(),
-    backgroundMode: z.enum(["auto", "preset", "ai_improvised"]).default("auto"),
-    backgroundPresetId: z.string().uuid().optional(),
-    accessoryPresetIds: z.array(z.string().uuid()).default([]),
-    productImages: productImagesSchema, // foto warna UTAMA/default — 7 slot lengkap
-    productWarna: z.string().optional(), // warna utama yg dipakai di foto utama/angle
-    // REVISI #6 (final, hemat-foto): "seri" = varian WARNA lain dari produk
-    // yang sama. Cukup SATU foto full-body per warna — foto detail/konstruksi
-    // lainnya otomatis dipakai ulang dari productImages (warna utama), karena
-    // bentuk/bordir/motif identik lintas warna, cuma warna kain yang beda.
-    seriEntries: z
-      .array(z.object({ warna: z.string(), image: z.string().url() }))
-      .max(6)
-      .default([]),
-  })
-  .refine((v) => Boolean(v.productKode) !== Boolean(v.sampelId), {
-    message: "Isi persis satu dari productKode atau sampelId, tidak boleh dua-duanya atau kosong.",
-    path: ["productKode"],
-  });
+// tidak memiliki kode produk"): productKode sekarang opsional — kalau
+// kosong, set ini generate utk sesuatu yang belum punya kode sama sekali.
+//
+// REVISI (November 2026, segera setelah itu — admin: "loh beda, itu mah
+// sampel planing, ga ada hubungannya ... kalau emang diharuskan ada nomor,
+// ya generate aja pas generate image, jadi kalau pilih tanpa sampel ya
+// gausah milih produk, angkanya nanti otomatis ke generate"): versi
+// PERTAMA minta admin pilih dari tabel `sampel` (Planning Repeat) saat mode
+// "Sampel" — SALAH PAHAM, itu fitur planning yang sama sekali tidak
+// berhubungan. Sekarang TIDAK ada pilihan apa pun di mode ini — kalau
+// productKode kosong, server generate label `sampel_nomor` sendiri
+// (buildSampelNomor() di bawah) saat set ini dibuat, murni label internal
+// biar baris ini bisa dibedakan di History — tidak menyentuh/membaca tabel
+// `sampel` sama sekali. Lihat migrasi
+// ai_generation_sets_sampel_nomor_standalone.
+const requestSchema = z.object({
+  modelId: z.string().uuid(),
+  poseId: z.string().uuid(), // pose untuk foto utama — DIPAKAI ULANG jg utk foto angle (REVISI #8)
+  productKode: z.string().optional(),
+  backgroundMode: z.enum(["auto", "preset", "ai_improvised"]).default("auto"),
+  backgroundPresetId: z.string().uuid().optional(),
+  accessoryPresetIds: z.array(z.string().uuid()).default([]),
+  productImages: productImagesSchema, // foto warna UTAMA/default — 7 slot lengkap
+  productWarna: z.string().optional(), // warna utama yg dipakai di foto utama/angle
+  // REVISI #6 (final, hemat-foto): "seri" = varian WARNA lain dari produk
+  // yang sama. Cukup SATU foto full-body per warna — foto detail/konstruksi
+  // lainnya otomatis dipakai ulang dari productImages (warna utama), karena
+  // bentuk/bordir/motif identik lintas warna, cuma warna kain yang beda.
+  seriEntries: z
+    .array(z.object({ warna: z.string(), image: z.string().url() }))
+    .max(6)
+    .default([]),
+});
+
+// Label internal utk set yang productKode-nya kosong — HANYA dipakai biar
+// baris ini bisa dibedakan satu sama lain di History (lihat
+// displayLabel() di app/history/page.tsx), TIDAK terhubung ke tabel
+// `sampel` atau format kode produk apa pun. Prefix "GEN" sengaja beda dari
+// "SPL" (nomor sampel planning admin) & "D-" (kode produk) biar tidak
+// keliatan seperti salah satu dari keduanya.
+function buildSampelNomor() {
+  const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `GEN-${ymd}-${rand}`;
+}
 
 // Berapa banyak foto pose LAIN dari model yang sama dipakai sbg penguat
 // identitas di tiap pemanggilan Nano Banana Pro (di luar foto pose target).
@@ -321,7 +336,7 @@ export async function POST(req: NextRequest) {
     .from("ai_generation_sets")
     .insert({
       product_kode: input.productKode ?? null,
-      sampel_id: input.sampelId ?? null,
+      sampel_nomor: input.productKode ? null : buildSampelNomor(),
       model_id: input.modelId,
       pose_id: input.poseId,
       background_mode: input.backgroundMode,
