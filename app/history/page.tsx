@@ -486,6 +486,25 @@ export default function HistoryPage() {
     });
   }
 
+  // Upload foto manual (bukan dari riwayat generate set ini) buat salah
+  // satu panel kolase — mis. foto asli dari HP yang belum pernah di-AI,
+  // dipasangkan dengan foto hasil generate. Sama aturan maks 2 dgn
+  // toggleCollageUrl di atas; ImageUploadField-nya selalu kosong lagi
+  // setelah upload (slot "tambah", bukan preview yang disimpan).
+  function addManualCollageUrl(url: string) {
+    setCollageUrls((prev) => {
+      if (prev.length >= 2) {
+        toast.error("Sudah 2 foto dipilih — lepas salah satu dulu.");
+        return prev;
+      }
+      return [...prev, url];
+    });
+  }
+
+  function removeCollageUrlAt(index: number) {
+    setCollageUrls((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleCreateCollage() {
     if (!selected || collageUrls.length !== 2) return;
     setCreatingCollage(true);
@@ -1131,8 +1150,6 @@ export default function HistoryPage() {
                         g.output_image_url &&
                         !COLLAGE_SOURCE_EXCLUDED_ROLES.includes(g.image_role)
                     );
-                    if (collageSourcePhotos.length < 2) return null;
-
                     return (
                       <div className="mt-4 rounded-lg border border-border bg-surface-2 p-3">
                         <div className="mb-2 flex items-center gap-2 text-xs font-medium text-text">
@@ -1140,44 +1157,92 @@ export default function HistoryPage() {
                           + Kolase 2 Foto
                         </div>
                         <p className="mb-3 text-xs text-text-faint">
-                          Pilih tepat 2 foto buat digabung jadi 1 gambar berdampingan — mis.
-                          tampak depan + tampak belakang, atau tampak depan + Lineup Warna, buat
-                          di-share ke langganan.
+                          Pilih tepat 2 foto buat digabung jadi 1 gambar berdampingan — dari
+                          riwayat generate set ini, atau upload foto manual (mis. foto asli dari
+                          HP yang belum pernah di-AI).
                         </p>
-                        <div className="mb-3 flex flex-wrap gap-2">
-                          {collageSourcePhotos.map((g) => {
-                            const url = g.output_image_url as string;
-                            const order = collageUrls.indexOf(url);
-                            return (
-                              <button
-                                key={g.id}
-                                type="button"
-                                onClick={() => toggleCollageUrl(url)}
-                                title={ROLE_LABELS[g.image_role] ?? g.image_role}
-                                className={cn(
-                                  "relative h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition-colors",
-                                  order >= 0
-                                    ? "border-gold"
-                                    : "border-border-strong hover:border-border"
-                                )}
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={g.output_thumb_url ?? url}
-                                  loading="lazy"
-                                  decoding="async"
-                                  alt={g.image_role}
-                                  className="h-full w-full object-cover"
-                                />
-                                {order >= 0 && (
+
+                        {collageSourcePhotos.length > 0 && (
+                          <div className="mb-3 flex flex-wrap gap-2">
+                            {collageSourcePhotos.map((g) => {
+                              const url = g.output_image_url as string;
+                              const order = collageUrls.indexOf(url);
+                              return (
+                                <button
+                                  key={g.id}
+                                  type="button"
+                                  onClick={() => toggleCollageUrl(url)}
+                                  title={ROLE_LABELS[g.image_role] ?? g.image_role}
+                                  className={cn(
+                                    "relative h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition-colors",
+                                    order >= 0
+                                      ? "border-gold"
+                                      : "border-border-strong hover:border-border"
+                                  )}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={g.output_thumb_url ?? url}
+                                    loading="lazy"
+                                    decoding="async"
+                                    alt={g.image_role}
+                                    className="h-full w-full object-cover"
+                                  />
+                                  {order >= 0 && (
+                                    <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gold text-[10px] font-semibold text-ink">
+                                      {order + 1}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {collageUrls.length > 0 && (
+                          <div className="mb-3">
+                            <p className="mb-1.5 text-xs font-medium text-text-faint">
+                              Foto terpilih
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {collageUrls.map((url, i) => (
+                                <div
+                                  key={`${url}-${i}`}
+                                  className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 border-gold"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={url}
+                                    alt={`Foto terpilih ${i + 1}`}
+                                    className="h-full w-full object-cover"
+                                  />
                                   <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gold text-[10px] font-semibold text-ink">
-                                    {order + 1}
+                                    {i + 1}
                                   </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeCollageUrlAt(i)}
+                                    className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-text hover:bg-danger/80"
+                                  >
+                                    <X className="h-2.5 w-2.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {collageUrls.length < 2 && (
+                          <div className="mb-3 w-28">
+                            <ImageUploadField
+                              label="Upload Manual"
+                              folder="collage-manual"
+                              value={null}
+                              onChange={(url) => url && addManualCollageUrl(url)}
+                              hint="Foto dari luar riwayat (mis. HP)"
+                            />
+                          </div>
+                        )}
 
                         <div className="mb-3 rounded-lg border border-border bg-surface px-3 py-2.5">
                           <label className="flex cursor-pointer items-start gap-2.5">
