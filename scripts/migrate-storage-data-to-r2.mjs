@@ -181,10 +181,10 @@ async function main() {
       const relativePath = oldUrl.slice(OLD_BASE.length);
       const key = `${R2_ROOT_FOLDER}/${relativePath}`;
       try {
-        const res = await fetch(oldUrl);
-        if (!res.ok) throw new Error(`download gagal (${res.status})`);
-        const buffer = Buffer.from(await res.arrayBuffer());
-        const contentType = res.headers.get("content-type") || "application/octet-stream";
+        const { data: blob, error: dlErr } = await supabase.storage.from(BUCKET).download(relativePath);
+        if (dlErr) throw new Error(`download gagal: ${dlErr.message}`);
+        const buffer = Buffer.from(await blob.arrayBuffer());
+        const contentType = blob.type || "application/octet-stream";
         await r2.send(
           new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, Body: buffer, ContentType: contentType })
         );
