@@ -31,6 +31,15 @@ export interface BackgroundPreset {
   cocok_untuk_kategori: string[];
   last_used_at: string | null;
   use_count: number;
+  // REVISI (admin: preset "Fashion Show Runway" butuh logo brand asli
+  // tampil persis, bukan ditebak dari teks) — sebelumnya field ini HANYA
+  // dipakai sbg thumbnail preview admin di app/presets/page.tsx, tidak
+  // pernah ikut dikirim ke AI. Sekarang kalau preset yang dipakai punya
+  // reference_image_url, composeBackground() meneruskannya lewat
+  // `referenceImageUrl` di bawah supaya runNanoBananaGenerate() bisa
+  // mengirimnya sbg foto referensi visual (lihat lib/prompts/
+  // nano-banana-generate.ts) — bukan cuma dideskripsikan lewat kata-kata.
+  reference_image_url: string | null;
 }
 
 export interface ComposeBackgroundInput {
@@ -45,6 +54,9 @@ export interface ComposedBackground {
   source: "preset" | "ai_improvised";
   presetId?: string;
   description: string; // dipakai sbg {background_description} di prompt tahap 2 (§7.6)
+  // Foto referensi visual preset ini (kalau admin upload satu di halaman
+  // Presets) — lihat catatan reference_image_url di BackgroundPreset.
+  referenceImageUrl?: string;
 }
 
 // Elemen kombinasi untuk mode AI Improvisasi — daftar ini yang dimaksud PRD
@@ -137,14 +149,24 @@ export function composeBackground(
   if (input.forcedPresetId) {
     const forced = input.presets.find((p) => p.id === input.forcedPresetId);
     if (forced) {
-      return { source: "preset", presetId: forced.id, description: forced.prompt_fragment };
+      return {
+        source: "preset",
+        presetId: forced.id,
+        description: forced.prompt_fragment,
+        referenceImageUrl: forced.reference_image_url ?? undefined,
+      };
     }
   }
 
   if (input.mode === "preset") {
     const preset = pickBestPreset(input.presets, input.productWarna, input.productKategori);
     if (preset) {
-      return { source: "preset", presetId: preset.id, description: preset.prompt_fragment };
+      return {
+        source: "preset",
+        presetId: preset.id,
+        description: preset.prompt_fragment,
+        referenceImageUrl: preset.reference_image_url ?? undefined,
+      };
     }
     // fallback kalau library preset kosong
     return { source: "ai_improvised", description: composeImprovised() };
@@ -158,7 +180,12 @@ export function composeBackground(
   const usePreset = Math.random() < 0.6 && input.presets.length > 0;
   if (usePreset) {
     const preset = pickBestPreset(input.presets, input.productWarna, input.productKategori)!;
-    return { source: "preset", presetId: preset.id, description: preset.prompt_fragment };
+    return {
+      source: "preset",
+      presetId: preset.id,
+      description: preset.prompt_fragment,
+      referenceImageUrl: preset.reference_image_url ?? undefined,
+    };
   }
   return { source: "ai_improvised", description: composeImprovised() };
 }
