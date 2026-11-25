@@ -370,7 +370,12 @@ export async function POST(req: NextRequest) {
     poseImageUrl: string,
     garmentReferences: GarmentReference[],
     variantWarna?: string,
-    variantProductImages?: Record<string, string>
+    variantProductImages?: Record<string, string>,
+    // REVISI (admin: foto depan & belakang harus di lokasi yang SAMA) — foto
+    // HASIL JADI "utama" diteruskan ke sini saat generate "angle"/"seri" biar
+    // AI meniru scene itu persis, bukan mengarang ulang dari teks (lihat
+    // sceneReferenceImageUrl di lib/prompts/nano-banana-generate.ts).
+    sceneReferenceImageUrl?: string
   ) {
     // REVISI #9 — "angle" pakai pose_id BEDA dari utama lagi (backPose, foto
     // referensi ASLI belakang model), isBackView cuma reinforcement teks
@@ -413,6 +418,7 @@ export async function POST(req: NextRequest) {
         garmentReferences,
         backgroundDescription: background.description,
         backgroundReferenceImageUrl: background.referenceImageUrl,
+        sceneReferenceImageUrl,
         productWarna: variantWarna ?? input.productWarna,
         accessoryPromptFragments: accessories.map((a) => a.prompt_fragment),
         seed: sharedSeed,
@@ -448,7 +454,9 @@ export async function POST(req: NextRequest) {
   }
 
   // --- Foto UTAMA (deliverable #1, badan penuh dari DEPAN) ---
-  await runFullPass(
+  // Hasil jadinya dipakai sbg sceneReferenceImageUrl utk angle & seri di
+  // bawah, supaya scene/lokasinya KONSISTEN (lihat catatan di runFullPass).
+  const utamaResultUrl = await runFullPass(
     "utama",
     input.poseId,
     posesById.get(input.poseId)!.reference_image_url,
@@ -474,7 +482,10 @@ export async function POST(req: NextRequest) {
     prioritizeReference(
       prioritizeReference(primaryGarmentReferences, input.productImages.detailBack),
       input.productImages.back
-    )
+    ),
+    undefined,
+    undefined,
+    utamaResultUrl ?? undefined
   );
 
   // --- Foto SERI (varian warna lain, 0-6x, TIDAK termasuk 4-foto-tetap —
@@ -497,7 +508,8 @@ export async function POST(req: NextRequest) {
         },
       ],
       entry.warna,
-      { image: entry.image }
+      { image: entry.image },
+      utamaResultUrl ?? undefined
     );
   }
 

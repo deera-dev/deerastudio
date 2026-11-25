@@ -259,6 +259,23 @@ export async function POST(
         .select("*")
         .eq("is_active", true);
 
+      // REVISI (admin: foto depan & belakang harus di lokasi yang SAMA) —
+      // utk role "angle"/"seri", pakai foto HASIL JADI "utama" set ini sbg
+      // sceneReferenceImageUrl (lihat nano-banana-generate.ts) supaya AI
+      // meniru scene itu persis alih-alih mengarang ulang dari teks yang
+      // sama. "utama" sendiri tidak dikasih acuan ini — dialah yang jadi
+      // anchor scene utk shot lain di set ini.
+      let sceneReferenceImageUrl: string | undefined;
+      if (gen.image_role !== "utama") {
+        const { data: utamaGen } = await supabase
+          .from("ai_generations")
+          .select("output_image_url")
+          .eq("generation_set_id", set.id)
+          .eq("image_role", "utama")
+          .maybeSingle();
+        sceneReferenceImageUrl = utamaGen?.output_image_url ?? undefined;
+      }
+
       const background = composeBackground({
         mode: backgroundModeOverride ?? set.background_mode,
         productWarna: set.product_warna ?? undefined,
@@ -302,6 +319,7 @@ export async function POST(
         garmentReferences,
         backgroundDescription: background.description,
         backgroundReferenceImageUrl: background.referenceImageUrl,
+        sceneReferenceImageUrl,
         productWarna: isSeri ? gen.variant_warna ?? undefined : set.product_warna ?? undefined,
         isColorVariant: isSeri,
         // REVISI #8 — "angle" pakai pose YANG SAMA dgn utama (poseId di atas
