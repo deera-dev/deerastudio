@@ -189,9 +189,17 @@ async function main() {
         }
         const buffer = Buffer.from(await blob.arrayBuffer());
         const contentType = blob.type || "application/octet-stream";
-        await r2.send(
-          new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, Body: buffer, ContentType: contentType })
-        );
+        try {
+          await r2.send(
+            new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, Body: buffer, ContentType: contentType })
+          );
+        } catch (r2Err) {
+          console.error(
+            `  DETAIL ERROR R2 (Bucket="${R2_BUCKET}", Key="${key}"):`,
+            JSON.stringify(r2Err, Object.getOwnPropertyNames(r2Err))
+          );
+          throw r2Err;
+        }
         mapping[oldUrl] = `${R2_PUBLIC_URL}/${key}`;
         consecutiveFails = 0;
       } catch (err) {
