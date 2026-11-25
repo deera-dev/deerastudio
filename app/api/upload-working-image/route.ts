@@ -1,12 +1,12 @@
 // POST /api/upload-working-image — proxy upload file dari browser ke
-// Cloudinary (lib/cloudinary/storage-server.ts) tanpa pernah mengekspos
-// CLOUDINARY_API_SECRET ke client. Dipakai oleh lib/cloudinary/storage.ts
+// Cloudflare R2 (lib/r2/storage-server.ts) tanpa pernah mengekspos
+// R2_SECRET_ACCESS_KEY ke client. Dipakai oleh lib/r2/storage.ts
 // (pengganti lib/supabase/storage.ts, yang sebelumnya upload LANGSUNG dari
-// browser ke Supabase pakai anon key -- Cloudinary tidak punya skema
-// "anon key aman" yang setara utk upload langsung dari browser tanpa
-// upload preset, jadi lewat satu hop server singkat di sini).
+// browser ke Supabase pakai anon key -- R2 tidak punya skema "anon key
+// aman" yang setara utk upload langsung dari browser, jadi lewat satu hop
+// server singkat di sini).
 import { NextRequest, NextResponse } from "next/server";
-import { uploadBufferToStorage } from "@/lib/cloudinary/storage-server";
+import { uploadBufferToStorage } from "@/lib/r2/storage-server";
 
 export async function POST(req: NextRequest) {
   const form = await req.formData();

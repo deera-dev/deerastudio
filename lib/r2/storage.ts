@@ -2,9 +2,8 @@
 // koreksi, dst) -- pengganti lib/supabase/storage.ts. Resize client-side
 // SAMA PERSIS dgn versi lama (lihat alasannya di komentar lib/supabase/
 // storage.ts: batas ukuran fal-ai/flux-pro/v1/vto), tapi upload-nya lewat
-// /api/upload-working-image (bukan langsung ke provider) krn Cloudinary
-// tidak punya skema "anon key aman" setara Supabase utk upload langsung
-// dari browser tanpa upload preset.
+// /api/upload-working-image (bukan langsung ke R2) krn kredensial R2
+// (R2_SECRET_ACCESS_KEY) tidak boleh diekspos ke client.
 //
 // Signature SENGAJA dibuat identik dgn uploadToStorage lama
 // (File, folder) -> Promise<string> supaya pemanggilnya (ImageUploadField,

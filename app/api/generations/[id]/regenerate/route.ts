@@ -107,7 +107,7 @@ import { runDetailCrop } from "@/lib/prompts/stage2";
 import { composeBackground, type BackgroundMode } from "@/lib/prompts/background-composer";
 import { renderKolaseGabunganPng, renderKolaseDetailPng } from "@/lib/image-template/set-collage";
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
-import { uploadBufferToStorage } from "@/lib/cloudinary/storage-server";
+import { uploadBufferToStorage } from "@/lib/r2/storage-server";
 import { makeThumbnailUrl } from "@/lib/images/mirror-output";
 import type { BackgroundPresetRow, Generation } from "@/types/database";
 

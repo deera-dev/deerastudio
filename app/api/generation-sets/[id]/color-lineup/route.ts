@@ -60,7 +60,7 @@ import {
   type ColorLineupReference,
 } from "@/lib/prompts/color-lineup-generate";
 import { renderColorLineupPng } from "@/lib/image-template/color-lineup";
-import { uploadBufferToStorage } from "@/lib/cloudinary/storage-server";
+import { uploadBufferToStorage } from "@/lib/r2/storage-server";
 import { makeThumbnailUrl } from "@/lib/images/mirror-output";
 import { errorMessage } from "@/lib/api-error";
 

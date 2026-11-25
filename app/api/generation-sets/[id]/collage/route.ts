@@ -19,7 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { renderPhotoCollagePng } from "@/lib/image-template/photo-collage";
-import { uploadBufferToStorage } from "@/lib/cloudinary/storage-server";
+import { uploadBufferToStorage } from "@/lib/r2/storage-server";
 import { makeThumbnailUrl } from "@/lib/images/mirror-output";
 import { errorMessage, zodErrorMessage } from "@/lib/api-error";
 

@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generateComboPhoto } from "@/lib/prompts/combo-photo";
-import { uploadBufferToStorage } from "@/lib/cloudinary/storage-server";
+import { uploadBufferToStorage } from "@/lib/r2/storage-server";
 
 const requestSchema = z.object({
   sourceImageUrls: z.array(z.string().url()).min(2).max(5),

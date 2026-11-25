@@ -9,7 +9,7 @@
 // JPEG ~720px (puluhan KB) utk grid/list; PNG penuh hanya dibuka saat foto
 // di-klik (lightbox/download).
 import sharp from "sharp";
-import { uploadBufferToStorage } from "@/lib/cloudinary/storage-server";
+import { uploadBufferToStorage } from "@/lib/r2/storage-server";
 
 const THUMB_WIDTH = 720;
 
