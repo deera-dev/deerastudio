@@ -177,20 +177,32 @@ async function main() {
     console.log(`Memindahkan ${allUrls.size} file dari Supabase Storage ke R2...`);
     const mapping = {};
     let done = 0;
+    let consecutiveFails = 0;
     for (const oldUrl of allUrls) {
       const relativePath = oldUrl.slice(OLD_BASE.length);
       const key = `${R2_ROOT_FOLDER}/${relativePath}`;
       try {
         const { data: blob, error: dlErr } = await supabase.storage.from(BUCKET).download(relativePath);
-        if (dlErr) throw new Error(`download gagal: ${dlErr.message}`);
+        if (dlErr) {
+          console.error("  DETAIL ERROR:", JSON.stringify(dlErr, Object.getOwnPropertyNames(dlErr)));
+          throw new Error(`download gagal: ${dlErr.message}`);
+        }
         const buffer = Buffer.from(await blob.arrayBuffer());
         const contentType = blob.type || "application/octet-stream";
         await r2.send(
           new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, Body: buffer, ContentType: contentType })
         );
         mapping[oldUrl] = `${R2_PUBLIC_URL}/${key}`;
+        consecutiveFails = 0;
       } catch (err) {
         console.error(`  GAGAL ${oldUrl}: ${err.message}`);
+        consecutiveFails++;
+        if (consecutiveFails >= 3) {
+          console.error(
+            "\n3 file pertama berturut-turut gagal -- berhenti di sini supaya tidak buang waktu. Cek detail error di atas."
+          );
+          process.exit(1);
+        }
       }
       done++;
       if (done % 50 === 0) console.log(`  ${done}/${allUrls.size}...`);
