@@ -36,7 +36,7 @@
 //   ...                                            --delete-old
 
 import { createClient } from "@supabase/supabase-js";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { writeFile, readFile } from "node:fs/promises";
 
 const SUPABASE_URL =
@@ -111,8 +111,22 @@ function findUrlsDeep(value, found) {
   }
 }
 
+// Kalau oldUrl ada di urlMap (hasil download+upload di run INI), pakai itu.
+// Kalau tidak ada tapi masih berformat OLD_BASE, fallback ke URL R2 yg
+// dihitung langsung dari relative path -- krn key R2 SELALU
+// `${R2_ROOT_FOLDER}/${relativePath}` (sama persis di semua run), ini
+// menangani referensi duplikat (misal file yg sama direferensikan dari
+// product_images DAN lineup_color_refs) yg file-nya sudah pernah pindah
+// di run sebelumnya tapi baru ketemu kolomnya belakangan.
 function replaceUrlsDeep(value, urlMap) {
-  if (typeof value === "string") return urlMap.has(value) ? urlMap.get(value) : value;
+  if (typeof value === "string") {
+    if (urlMap.has(value)) return urlMap.get(value);
+    if (value.startsWith(OLD_BASE)) {
+      const relativePath = value.slice(OLD_BASE.length);
+      return `${R2_PUBLIC_URL}/${R2_ROOT_FOLDER}/${relativePath}`;
+    }
+    return value;
+  }
   if (Array.isArray(value)) return value.map((v) => replaceUrlsDeep(v, urlMap));
   if (value && typeof value === "object") {
     const out = {};
@@ -187,6 +201,26 @@ async function main() {
       try {
         const { data: blob, error: dlErr } = await supabase.storage.from(BUCKET).download(relativePath);
         if (dlErr) {
+          // 404 di Supabase -- mungkin file ini direferensikan dari 2 kolom
+          // berbeda (mis. product_images DAN lineup_color_refs) dan sudah
+          // kepindah+kehapus di run sebelumnya lewat kolom yg lain. Cek dulu
+          // apakah key yg SAMA sudah ada di R2 sebelum dianggap gagal.
+          if (dlErr.statusCode === "404" || dlErr.code === "NoSuchKey") {
+            try {
+              await r2.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+              console.log(`  (sudah ada di R2 dari run sebelumnya, dilewati download) ${key}`);
+              mapping[oldUrl] = `${R2_PUBLIC_URL}/${key}`;
+              consecutiveFails = 0;
+              done++;
+              if (done % 50 === 0) console.log(`  ${done}/${allUrls.size}...`);
+              continue;
+            } catch {
+              console.error(`  TIDAK DITEMUKAN di Supabase maupun R2 -- dilewati: ${oldUrl}`);
+              done++;
+              if (done % 50 === 0) console.log(`  ${done}/${allUrls.size}...`);
+              continue;
+            }
+          }
           console.error("  DETAIL ERROR:", JSON.stringify(dlErr, Object.getOwnPropertyNames(dlErr)));
           throw new Error(`download gagal: ${dlErr.message}`);
         }
