@@ -77,16 +77,25 @@ const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "");
 // Kolom per tabel yang mungkin menyimpan URL ke bucket ai-fashion-studio
 // (text ATAU jsonb -- diperiksa generik lewat findUrlsDeep/replaceUrlsDeep
 // di bawah, jadi tidak perlu tau persis struktur tiap kolom jsonb-nya).
-const TABLE_COLUMNS = {
-  ai_models: ["thumbnail_url"],
-  ai_poses: ["reference_image_url"],
-  ai_background_presets: ["reference_image_url"],
-  ai_accessory_presets: ["reference_image_url"],
-  ai_generation_sets: ["product_images", "published_image_urls", "video_url"],
-  ai_generations: ["output_image_url", "output_thumb_url", "variant_product_images", "video_url", "vto_image_url"],
-  content_posts: ["image_urls", "video_url"],
-  freeform_generations: ["output_image_url", "output_thumb_url", "reference_image_urls"],
-  products: ["image", "video", "detail", "warna_images", "seri_warna"],
+// idColumn beda-beda per tabel -- SEMUA tabel ai_*/content_posts/
+// freeform_generations pakai "id" (uuid), TAPI products pakai "kode"
+// sbg primary key (tidak ada kolom "id" di tabel products).
+const TABLE_CONFIG = {
+  ai_models: { idColumn: "id", columns: ["thumbnail_url"] },
+  ai_poses: { idColumn: "id", columns: ["reference_image_url"] },
+  ai_background_presets: { idColumn: "id", columns: ["reference_image_url"] },
+  ai_accessory_presets: { idColumn: "id", columns: ["reference_image_url"] },
+  ai_generation_sets: { idColumn: "id", columns: ["product_images", "published_image_urls", "video_url"] },
+  ai_generations: {
+    idColumn: "id",
+    columns: ["output_image_url", "output_thumb_url", "variant_product_images", "video_url", "vto_image_url"],
+  },
+  content_posts: { idColumn: "id", columns: ["image_urls", "video_url"] },
+  freeform_generations: {
+    idColumn: "id",
+    columns: ["output_image_url", "output_thumb_url", "reference_image_urls"],
+  },
+  products: { idColumn: "kode", columns: ["image", "video", "detail", "warna_images", "seri_warna"] },
 };
 
 function findUrlsDeep(value, found) {
@@ -110,13 +119,13 @@ function replaceUrlsDeep(value, urlMap) {
   return value;
 }
 
-async function fetchAllRows(table, columns) {
+async function fetchAllRows(table, idColumn, columns) {
   const rows = [];
   const pageSize = 1000;
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase
       .from(table)
-      .select(`id, ${columns.join(", ")}`)
+      .select(`${idColumn}, ${columns.join(", ")}`)
       .range(offset, offset + pageSize - 1);
     if (error) throw new Error(`fetch ${table}: ${error.message}`);
     rows.push(...data);
@@ -131,8 +140,8 @@ async function fetchAllRows(table, columns) {
 async function scanReferencedUrls() {
   const allUrls = new Set();
   const perTable = {};
-  for (const [table, columns] of Object.entries(TABLE_COLUMNS)) {
-    const rows = await fetchAllRows(table, columns);
+  for (const [table, { idColumn, columns }] of Object.entries(TABLE_CONFIG)) {
+    const rows = await fetchAllRows(table, idColumn, columns);
     let rowsAffected = 0;
     for (const row of rows) {
       const found = new Set();
@@ -198,8 +207,8 @@ async function main() {
     const urlMap = new Map(Object.entries(mapping));
     console.log(`Memakai pemetaan ${urlMap.size} url dari ${MAPPING_FILE}.`);
 
-    for (const [table, columns] of Object.entries(TABLE_COLUMNS)) {
-      const rows = await fetchAllRows(table, columns);
+    for (const [table, { idColumn, columns }] of Object.entries(TABLE_CONFIG)) {
+      const rows = await fetchAllRows(table, idColumn, columns);
       let updated = 0;
       for (const row of rows) {
         const patch = {};
@@ -213,9 +222,9 @@ async function main() {
           }
         }
         if (changed) {
-          const { error } = await supabase.from(table).update(patch).eq("id", row.id);
+          const { error } = await supabase.from(table).update(patch).eq(idColumn, row[idColumn]);
           if (error) {
-            console.error(`  GAGAL update ${table}#${row.id}: ${error.message}`);
+            console.error(`  GAGAL update ${table}#${row[idColumn]}: ${error.message}`);
             continue;
           }
           updated++;
