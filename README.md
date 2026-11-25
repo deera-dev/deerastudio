@@ -22,14 +22,23 @@ terkini, arsitektur, keputusan desain): [`docs/PRD-AI-Fashion-Studio.md`](./docs
   `khpgjfsaucrhihadnewq`), bukan project baru. Tabel baru pakai prefix `ai_`
   (`ai_models`, `ai_poses`, `ai_background_presets`, `ai_accessory_presets`,
   `ai_generation_sets`, `ai_generations`, `ai_cost_log`) + `content_posts`
-  (Content Studio, tanpa prefix).
+  (Content Studio, tanpa prefix). **Database + Auth saja** — tidak lagi
+  dipakai untuk Storage (lihat poin R2 di bawah).
 - Fal.ai — **Nano Banana Pro edit** (mesin utama, single-stage — bukan lagi
   FLUX VTO + Kontext dua tahap terpisah), FLUX Kontext Pro (crop foto detail
   saja), Kling 3.0 Pro (video), ffmpeg-api/merge-videos (gabung video),
   openrouter/router (text-gen Content Studio). Lihat PRD §9 untuk detail
   peran tiap model.
-- Cloudinary — untuk gambar final saat publish ke katalog Deera (akun
-  Cloudinary Deera yang sama)
+- **Cloudflare R2** — storage SEMUA file kerja/intermediate (hasil generate,
+  thumbnail, kolase, foto referensi koreksi, dst — `lib/r2/storage.ts`,
+  `lib/r2/storage-server.ts`). Menggantikan Supabase Storage (bucket
+  `ai-fashion-studio`) per November 2026 setelah project Supabase kena Fair
+  Use restriction karena Storage Size melebihi kuota free tier 1GB — R2
+  dipilih krn storage gratisnya lebih besar (10GB) DAN egress-nya gratis
+  selamanya tanpa batas (lihat docs/PRD-AI-Fashion-Studio.md §22).
+- Cloudinary — HANYA untuk gambar final saat publish ke katalog Deera
+  (akun Cloudinary Deera yang sama, `lib/cloudinary/client.ts`) — bukan
+  lagi tempat penyimpanan file kerja.
 - Instagram Graph API — publish konten Content Studio (opsional)
 
 ## Setup
@@ -55,7 +64,17 @@ terkini, arsitektur, keputusan desain): [`docs/PRD-AI-Fashion-Studio.md`](./docs
      saldo (lihat estimasi biaya di PRD §20 — pantau juga lewat Dashboard
      app ini sendiri setelah jalan, lihat §Cost tracking di bawah)
    - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET`
-     — akun Cloudinary Deera yang sudah ada
+     — akun Cloudinary Deera yang sudah ada (HANYA dipakai saat publish
+     final ke katalog, lihat `lib/cloudinary/client.ts`)
+   - `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` /
+     `R2_BUCKET_NAME` / `R2_PUBLIC_URL` — storage file kerja
+     (`lib/r2/storage-server.ts`). Buat di
+     [Cloudflare Dashboard](https://dash.cloudflare.com) → R2 → buat bucket
+     baru → "Manage R2 API Tokens" (buat token baca+tulis, catat Account ID
+     + Access Key ID + Secret Access Key) → di bucket, aktifkan "Public
+     Access" lewat r2.dev (gratis, tanpa custom domain) dan salin URL
+     publiknya (format `https://pub-xxxxxxxx.r2.dev`) ke `R2_PUBLIC_URL`
+     (tanpa trailing slash).
    - `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_BUSINESS_ACCOUNT_ID` — opsional,
      lihat §Content Studio & Instagram di bawah
 

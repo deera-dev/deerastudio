@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generateMarketingPhoto } from "@/lib/prompts/marketing-photo";
-import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
+import { uploadBufferToStorage } from "@/lib/r2/storage-server";
 
 const requestSchema = z.object({
   sourceImageUrl: z.string().url(),

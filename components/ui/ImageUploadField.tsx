@@ -14,7 +14,7 @@ import { useDropzone } from "react-dropzone";
 import { AnimatePresence, motion } from "framer-motion";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { uploadToStorage } from "@/lib/supabase/storage";
+import { uploadToStorage } from "@/lib/r2/storage";
 import { cn } from "@/lib/utils";
 
 export function ImageUploadField({

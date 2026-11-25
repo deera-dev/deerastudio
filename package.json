@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1177.0",
     "@fal-ai/client": "^1.2.0",
     "@fontsource/alex-brush": "^5.3.0",
     "@fontsource/fraunces": "^5.3.0",

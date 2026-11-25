@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { renderPosterPng } from "@/lib/image-template/poster";
-import { uploadBufferToStorage } from "@/lib/supabase/storage-server";
+import { uploadBufferToStorage } from "@/lib/r2/storage-server";
 
 const requestSchema = z.object({
   photoUrl: z.string().url(),
