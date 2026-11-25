@@ -42,8 +42,11 @@ import { Fragment, useEffect, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
 import { Lock, Wand2 } from "lucide-react";
 import { Button } from "./Button";
-import { Textarea } from "./Field";
+import { Select, Textarea } from "./Field";
 import { ImageUploadField } from "./ImageUploadField";
+import { cn } from "@/lib/utils";
+
+type BackgroundPresetOption = { id: string; name: string };
 
 type PromptOptions = {
   title: string;
@@ -57,9 +60,23 @@ type PromptOptions = {
   allowLockGarment?: boolean;
   lockGarmentLabel?: string;
   lockGarmentHint?: string;
+  // REVISI (admin: mau bisa pilih background Auto/Preset langsung dari
+  // dialog "Generate Ulang", bukan cuma ikut background yang tersimpan dari
+  // generate-set awal) — opsional, dirender HANYA kalau caller kirim daftar
+  // preset (lihat app/history/page.tsx). `recommendedBackgroundPresetId`
+  // jadi pilihan default saat mode "Preset" (admin minta default-nya
+  // "Fashion Show Runway"), tapi tetap bisa diganti ke preset lain.
+  backgroundPresets?: BackgroundPresetOption[];
+  recommendedBackgroundPresetId?: string;
 };
 
-export type PromptResult = { note: string; referenceImageUrls: string[]; lockGarment: boolean };
+export type PromptResult = {
+  note: string;
+  referenceImageUrls: string[];
+  lockGarment: boolean;
+  backgroundMode?: "auto" | "preset";
+  backgroundPresetId?: string;
+};
 
 type PromptState = PromptOptions & { resolve: (value: PromptResult | null) => void };
 
@@ -77,6 +94,8 @@ export function PromptDialogHost() {
     Array(MAX_REFERENCE_IMAGES).fill(null)
   );
   const [lockGarment, setLockGarment] = useState(false);
+  const [backgroundMode, setBackgroundMode] = useState<"auto" | "preset">("preset");
+  const [backgroundPresetId, setBackgroundPresetId] = useState("");
 
   useEffect(() => {
     openImpl = (opts) =>
@@ -84,6 +103,10 @@ export function PromptDialogHost() {
         setValue("");
         setImageUrls(Array(MAX_REFERENCE_IMAGES).fill(null));
         setLockGarment(false);
+        setBackgroundMode(opts.backgroundPresets?.length ? "preset" : "auto");
+        setBackgroundPresetId(
+          opts.recommendedBackgroundPresetId ?? opts.backgroundPresets?.[0]?.id ?? ""
+        );
         setState({ ...opts, resolve });
       });
     return () => {
@@ -165,6 +188,49 @@ export function PromptDialogHost() {
                   )}
                 </div>
               )}
+              {!!state?.backgroundPresets?.length && (
+                <div className="mb-6">
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-text-muted">
+                    Background
+                  </label>
+                  <div className="flex gap-2">
+                    {(["auto", "preset"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setBackgroundMode(m)}
+                        className={cn(
+                          "flex-1 rounded-md border px-3 py-2 text-sm transition-colors",
+                          backgroundMode === m
+                            ? "border-gold/60 bg-gold/5 text-text"
+                            : "border-border-strong text-text-muted hover:border-border-strong/80"
+                        )}
+                      >
+                        {m === "auto" ? "Auto" : "Preset"}
+                      </button>
+                    ))}
+                  </div>
+                  {backgroundMode === "preset" && (
+                    <div className="mt-2">
+                      <Select
+                        value={backgroundPresetId}
+                        onChange={(e) => setBackgroundPresetId(e.target.value)}
+                      >
+                        {state.backgroundPresets.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                            {p.id === state.recommendedBackgroundPresetId ? " (Direkomendasikan)" : ""}
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="mt-1.5 text-xs text-text-faint">
+                        Default preset yang direkomendasikan sudah dipilih — ganti kalau mau coba
+                        preset lain.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
               {state?.allowLockGarment && (
                 <label className="mb-6 flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/[0.1] bg-white/[0.03] px-3.5 py-3">
                   <input
@@ -197,6 +263,11 @@ export function PromptDialogHost() {
                       note: value.trim(),
                       referenceImageUrls: imageUrls.filter((u): u is string => Boolean(u)),
                       lockGarment,
+                      backgroundMode: state?.backgroundPresets?.length ? backgroundMode : undefined,
+                      backgroundPresetId:
+                        state?.backgroundPresets?.length && backgroundMode === "preset"
+                          ? backgroundPresetId || undefined
+                          : undefined,
                     })
                   }
                 >
