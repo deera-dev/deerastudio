@@ -301,6 +301,7 @@ export async function POST(
         identityReferenceUrls,
         garmentReferences,
         backgroundDescription: background.description,
+        backgroundReferenceImageUrl: background.referenceImageUrl,
         productWarna: isSeri ? gen.variant_warna ?? undefined : set.product_warna ?? undefined,
         isColorVariant: isSeri,
         // REVISI #8 — "angle" pakai pose YANG SAMA dgn utama (poseId di atas

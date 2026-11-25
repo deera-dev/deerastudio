@@ -256,6 +256,16 @@ export interface NanoBananaGenerateInput {
   identityReferenceUrls?: string[]; // foto lain model yg sama — penguat identitas, opsional tp direkomendasikan
   garmentReferences: GarmentReference[]; // SEMUA foto produk asli yang diupload, berlabel peran (lihat collectGarmentReferences) — tidak dikomposit
   backgroundDescription: string; // dari composeBackground()
+  // REVISI (admin: preset background "Fashion Show Runway" harus pakai logo
+  // brand ASLI, bukan ditebak AI dari teks — "saya kan sudah kasih filenya,
+  // kenapa diubah lagi"): foto referensi opsional dari background.
+  // referenceImageUrl (composeBackground(), lihat background-composer.ts).
+  // Kalau ada, dikirim sbg foto referensi visual TAMBAHAN + klausa 5 di
+  // buildPrompt() menegaskan AI harus mereproduksi logo/elemen di foto ini
+  // APA ADANYA, bukan mendesain ulang — sama prinsipnya dgn PRODUCT
+  // REFERENCE utk garment (klausa 2), hanya saja ini utk elemen DI
+  // BACKGROUND, bukan produk yang dipakai model.
+  backgroundReferenceImageUrl?: string;
   productWarna?: string;
   accessoryPromptFragments?: string[];
   seed?: number;
@@ -337,7 +347,10 @@ function buildPrompt(input: NanoBananaGenerateInput): string {
   return [
     "You are an expert in professional fashion photography, garment visualization, and high-fidelity image editing.",
     "",
-    "You are given: (1) one or more MODEL REFERENCE images of the same real female model — these establish ONLY her exact face, identity, body proportions, hands, and pose/body language; the clothing she happens to be wearing in these images is NOT the product and must be ignored entirely. (2) one or more PRODUCT REFERENCE images — these are FLAT-LAY PHOTOGRAPHS OF THE ACTUAL PHYSICAL GARMENT that must be worn by the model. They are not inspiration, not a style example, not a similar-looking product — they are the exact physical product, photographed flat. Treat them as a garment blueprint and the ABSOLUTE SOURCE OF TRUTH for everything about the clothing.",
+    "You are given: (1) one or more MODEL REFERENCE images of the same real female model — these establish ONLY her exact face, identity, body proportions, hands, and pose/body language; the clothing she happens to be wearing in these images is NOT the product and must be ignored entirely. (2) one or more PRODUCT REFERENCE images — these are FLAT-LAY PHOTOGRAPHS OF THE ACTUAL PHYSICAL GARMENT that must be worn by the model. They are not inspiration, not a style example, not a similar-looking product — they are the exact physical product, photographed flat. Treat them as a garment blueprint and the ABSOLUTE SOURCE OF TRUTH for everything about the clothing." +
+      (input.backgroundReferenceImageUrl
+        ? " (3) one BACKGROUND REFERENCE image, given LAST, after every MODEL and PRODUCT REFERENCE image — this shows an exact logo/brand mark that must appear in the background of the scene (see clause 5), reproduced faithfully, never redesigned."
+        : ""),
     "",
     referenceMapText,
     "",
@@ -381,7 +394,9 @@ function buildPrompt(input: NanoBananaGenerateInput): string {
       ? "4. POSE & BODY LANGUAGE (BACK VIEW — critical): one of the MODEL REFERENCE images already shows this exact model with her BACK to the camera — reproduce that same back-facing standing pose and camera framing, facing AWAY from the camera the entire time, showing the back of the garment FULLY VISIBLE (see clause 6 for the short-hijab requirement this depends on). Full body visible head to toe, face NOT visible anywhere in the image. Within that constraint, keep the posture relaxed and natural rather than mannequin-like — relaxed shoulders, natural arm position, slight natural weight shift, relaxed hands — but do not bend or twist the body in a way that distorts how the garment hangs or hides any back garment detail. Do not crop the garment."
       : "4. POSE & BODY LANGUAGE: a natural standing full-body fashion catalog pose, full body visible head to toe. Use the MODEL REFERENCE images primarily to preserve her exact identity, body proportions, and general pose/framing intent. The pose should look relaxed and natural rather than mannequin-like — subtle realistic asymmetry such as relaxed shoulders, natural arm position, slight natural weight shift, relaxed hands, and natural elbow positioning is encouraged. Do not create exaggerated fashion poses, and do not bend or twist the body in a way that changes how the garment should naturally hang or hides any garment detail. Do not crop the garment. Do not zoom into just the face.",
     "",
-    `5. BACKGROUND & SETTING: ${input.backgroundDescription}. COLOR RELATIONSHIP (critical, admin request — the goal is for the garment to look "bold dan cantik", clearly popping against the scene rather than blending into it): the background's DOMINANT color — walls, floor, large surfaces, drapery — must be a BOLD, CLEAR CONTRAST to the garment's actual color as seen in the PRODUCT REFERENCE (flat-lay) images, not a similar or matching color family. Pair a warm garment color with a cooler background (or vice versa), a dark/deep garment color with a lighter/brighter background (or vice versa), and a muted/soft garment color with a more saturated background — whatever creates the strongest, most flattering visual separation for THIS specific garment color. Then add exactly ONE or TWO small decorative accent details within the scene (e.g. a vase of flowers, a folded textile drape, a small styling prop, trim on a piece of furniture) in a color that closely MATCHES the garment's actual color — this accent is a deliberate "sweetener" that visually ties the model back into the scene without competing with the contrast. Do not render the background's dominant color in the same family as the garment, and do not skip the small matching accent. Beyond this color relationship, the background must complement the garment and remain secondary to it — clean, elegant, premium studio/interior atmosphere suitable for an established Indonesian Muslim fashion brand. No distracting objects, no fantasy environment, no obviously AI-generated background.`,
+    input.backgroundReferenceImageUrl
+      ? `5. BACKGROUND & SETTING — FIXED ART-DIRECTED SCENE (a BACKGROUND REFERENCE image has been provided, separate from the MODEL/PRODUCT REFERENCE images above): ${input.backgroundDescription}. The BACKGROUND REFERENCE image shows an exact logo/brand mark that MUST appear in the scene, reproduced with the SAME fidelity rule as the PRODUCT REFERENCE images — its exact shape, letterforms, proportions, and layout, NOT redrawn, NOT reinterpreted into a different font or icon, NOT simplified. Integrate it naturally into the scene exactly as the text above describes (e.g. glowing softly / backlit / etched, consistent with real studio lighting and reflections on the surfaces around it), as if it were a real physical sign or light fixture actually installed in the set — not a flat digital overlay or watermark stamped on top of the photo. This is a deliberately fixed, precise scene: do NOT adapt the background's color to contrast with the garment, and do NOT add any extra decorative props, flowers, or styling accents beyond exactly what is described above — the scene must stay exactly as specified, with nothing else in frame. The photograph overall must look like a real photo taken with a real camera in a real physical set — avoid any illustration, 3D-render, or graphic-design appearance.`
+      : `5. BACKGROUND & SETTING: ${input.backgroundDescription}. COLOR RELATIONSHIP (critical, admin request — the goal is for the garment to look "bold dan cantik", clearly popping against the scene rather than blending into it): the background's DOMINANT color — walls, floor, large surfaces, drapery — must be a BOLD, CLEAR CONTRAST to the garment's actual color as seen in the PRODUCT REFERENCE (flat-lay) images, not a similar or matching color family. Pair a warm garment color with a cooler background (or vice versa), a dark/deep garment color with a lighter/brighter background (or vice versa), and a muted/soft garment color with a more saturated background — whatever creates the strongest, most flattering visual separation for THIS specific garment color. Then add exactly ONE or TWO small decorative accent details within the scene (e.g. a vase of flowers, a folded textile drape, a small styling prop, trim on a piece of furniture) in a color that closely MATCHES the garment's actual color — this accent is a deliberate "sweetener" that visually ties the model back into the scene without competing with the contrast. Do not render the background's dominant color in the same family as the garment, and do not skip the small matching accent. Beyond this color relationship, the background must complement the garment and remain secondary to it — clean, elegant, premium studio/interior atmosphere suitable for an established Indonesian Muslim fashion brand. No distracting objects, no fantasy environment, no obviously AI-generated background.`,
     "",
     input.isBackView
       ? "6. STYLING (BACK VIEW — MANDATORY, NON-NEGOTIABLE, NO EXCEPTIONS): the hijab in THIS image MUST end AT THE NECK — it must NOT extend past the neckline onto the shoulders at all, and must NOT cover any part of the shoulders or back. Picture a short neck-wrap or turban-style hijab that stops exactly at the base of the neck/top of the shoulders — nothing below that line. This is a hard requirement, not a suggestion. This rule OVERRIDES every reference image without exception: even though the back-facing MODEL REFERENCE photo (and possibly other MODEL REFERENCE photos) shows this model wearing a LONGER hijab that covers her shoulders and drapes down her back, you must NOT copy that hijab length here — treat those reference photos as showing her FACE, HAIR-LINE, and BODY only, and deliberately crop the hijab up to neck-length in your output regardless of how it looks in every reference photo. The hijab is secondary to the garment: ANY hijab fabric touching the shoulders, upper back, or any part of the garment is WRONG and must be corrected before finalizing — there is no acceptable amount of shoulder coverage. The entire back of the garment — collar, shoulders, back panel, closure, embroidery/motif, seams, hemline, from the very top of the shoulders all the way down — must be 100% visible with zero fabric obstruction. Natural makeup, minimal jewelry. Do not invent accessories that conflict with the product."
@@ -424,7 +439,10 @@ export async function runNanoBananaGenerate(
   // foto identitas tambahan sbg yg pertama dikorbankan (min. 1 dijaga).
   const MAX_IMAGES = 14;
   const fixedCount =
-    1 + (input.previousResultUrl ? 1 : 0) + (input.correctionReferenceUrls?.length ?? 0);
+    1 +
+    (input.previousResultUrl ? 1 : 0) +
+    (input.correctionReferenceUrls?.length ?? 0) +
+    (input.backgroundReferenceImageUrl ? 1 : 0);
   const identityAll = input.identityReferenceUrls ?? [];
   let garmentBudget = Math.max(1, MAX_IMAGES - fixedCount - Math.min(identityAll.length, 1));
   garmentBudget = Math.min(garmentBudget, input.garmentReferences.length);
@@ -444,6 +462,10 @@ export async function runNanoBananaGenerate(
     // — pola yg sama dipakai utk MODEL/PRODUCT REFERENCE di atas).
     ...(input.previousResultUrl ? [input.previousResultUrl] : []),
     ...(input.correctionReferenceUrls ?? []),
+    // BACKGROUND REFERENCE (lihat buildPrompt) — SELALU TERAKHIR, posisinya
+    // diklaim eksplisit di teks prompt ("given LAST"), beda dari entry lain
+    // di atas yang dijelaskan lewat konten bukan posisi.
+    ...(input.backgroundReferenceImageUrl ? [input.backgroundReferenceImageUrl] : []),
   ];
 
   const result = await fal.subscribe(FAL_MODELS.NANO_BANANA, {

@@ -412,6 +412,7 @@ export async function POST(req: NextRequest) {
         identityReferenceUrls,
         garmentReferences,
         backgroundDescription: background.description,
+        backgroundReferenceImageUrl: background.referenceImageUrl,
         productWarna: variantWarna ?? input.productWarna,
         accessoryPromptFragments: accessories.map((a) => a.prompt_fragment),
         seed: sharedSeed,
