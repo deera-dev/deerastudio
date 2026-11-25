@@ -129,6 +129,15 @@ const requestSchema = z.object({
   referenceImageUrls: z.array(z.string().url()).max(3).optional(),
   // REVISI BESAR — lihat catatan (2) di atas.
   lockGarment: z.boolean().optional().default(false),
+  // REVISI (admin: mau bisa pilih background Auto/Preset langsung di dialog
+  // "Generate Ulang", bukan cuma ikut background_mode/background_preset_id
+  // tersimpan dari generate-set awal) — opsional, dari dialog di History
+  // (lihat components/ui/PromptDialog.tsx & app/history/page.tsx
+  // handleRegenerate). Kalau tidak dikirim, fallback ke background set
+  // seperti perilaku lama. HANYA relevan utk full regenerate (role
+  // "utama"/"angle"/"seri"), diabaikan di mode refine (lockGarment+note).
+  backgroundMode: z.enum(["auto", "preset"]).optional(),
+  backgroundPresetId: z.string().uuid().optional(),
 });
 
 const DETAIL_FOCUS_AREAS = [
@@ -156,6 +165,8 @@ export async function POST(
   const note = parsedBody.success ? parsedBody.data.note : undefined;
   const referenceImageUrls = parsedBody.success ? parsedBody.data.referenceImageUrls : undefined;
   const lockGarment = parsedBody.success ? parsedBody.data.lockGarment : false;
+  const backgroundModeOverride = parsedBody.success ? parsedBody.data.backgroundMode : undefined;
+  const backgroundPresetIdOverride = parsedBody.success ? parsedBody.data.backgroundPresetId : undefined;
   const supabase = await createClient();
 
   const { data: gen, error: genError } = await supabase
@@ -249,10 +260,15 @@ export async function POST(
         .eq("is_active", true);
 
       const background = composeBackground({
-        mode: set.background_mode,
+        mode: backgroundModeOverride ?? set.background_mode,
         productWarna: set.product_warna ?? undefined,
         presets: (presetsRaw ?? []) as BackgroundPresetRow[],
-        forcedPresetId: set.background_preset_id ?? undefined,
+        forcedPresetId:
+          backgroundModeOverride === "preset"
+            ? backgroundPresetIdOverride
+            : backgroundModeOverride === "auto"
+              ? undefined
+              : set.background_preset_id ?? undefined,
       });
 
       // REVISI hemat-foto: utk seri, garmentReferences = SEMUA foto warna
