@@ -85,7 +85,10 @@ const TABLE_CONFIG = {
   ai_poses: { idColumn: "id", columns: ["reference_image_url"] },
   ai_background_presets: { idColumn: "id", columns: ["reference_image_url"] },
   ai_accessory_presets: { idColumn: "id", columns: ["reference_image_url"] },
-  ai_generation_sets: { idColumn: "id", columns: ["product_images", "published_image_urls", "video_url"] },
+  ai_generation_sets: {
+    idColumn: "id",
+    columns: ["product_images", "published_image_urls", "video_url", "lineup_color_refs"],
+  },
   ai_generations: {
     idColumn: "id",
     columns: ["output_image_url", "output_thumb_url", "variant_product_images", "video_url", "vto_image_url"],
