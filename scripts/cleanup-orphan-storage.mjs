@@ -70,21 +70,50 @@ function collectReferencedPaths(rows) {
   return refs;
 }
 
+// Lewat Storage API .list() (BUKAN query ke storage.objects via PostgREST
+// -- schema "storage" ternyata tidak di-expose di project ini, lihat
+// error "Invalid schema: storage"). .list() cuma baca 1 level per
+// panggilan (tidak rekursif), jadi: list root dulu utk nemu semua
+// "folder" (muncul sbg entry dgn id=null), lalu list tiap folder itu
+// satu-satu. Struktur bucket ini selalu flat (folder/file.ext, tidak ada
+// sub-folder bersarang), jadi 2 level cukup.
 async function fetchAllStorageObjects() {
-  const rows = [];
+  const objects = [];
   const pageSize = 1000;
-  for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase
-      .schema("storage")
-      .from("objects")
-      .select("id, name, created_at, metadata")
-      .eq("bucket_id", BUCKET)
-      .range(offset, offset + pageSize - 1);
-    if (error) throw new Error(`fetch storage.objects: ${error.message}`);
-    rows.push(...data);
-    if (data.length < pageSize) break;
+
+  async function listAll(prefix) {
+    const entries = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabase.storage
+        .from(BUCKET)
+        .list(prefix, { limit: pageSize, offset, sortBy: { column: "name", order: "asc" } });
+      if (error) throw new Error(`list "${prefix}": ${error.message}`);
+      entries.push(...data);
+      if (data.length < pageSize) break;
+    }
+    return entries;
   }
-  return rows;
+
+  const rootEntries = await listAll("");
+  const folders = rootEntries.filter((e) => e.id === null);
+  const rootFiles = rootEntries.filter((e) => e.id !== null);
+  for (const f of rootFiles) {
+    objects.push({ name: f.name, created_at: f.created_at, metadata: f.metadata });
+  }
+
+  for (const folder of folders) {
+    const items = await listAll(folder.name);
+    for (const item of items) {
+      if (item.id === null) continue; // sub-folder bersarang, dilewati (struktur flat)
+      objects.push({
+        name: `${folder.name}/${item.name}`,
+        created_at: item.created_at,
+        metadata: item.metadata,
+      });
+    }
+  }
+
+  return objects;
 }
 
 async function main() {
