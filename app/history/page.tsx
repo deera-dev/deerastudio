@@ -21,7 +21,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Input, Label, Select, Textarea, FieldHint } from "@/components/ui/Field";
+import { Input, Label, Select, FieldHint } from "@/components/ui/Field";
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { showImageLightbox } from "@/components/ui/ImageLightbox";
@@ -212,7 +212,6 @@ export default function HistoryPage() {
   useEffect(() => {
     setAddSeriWarna("");
     setAddSeriImage(null);
-    setVideoPrompt("");
     setTransferOpen(false);
     setTransferQuery("");
     setTransferResults([]);
